@@ -9,8 +9,8 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Switch } from '@/components/ui/switch';
 import { useAction } from '@/hooks/use-actions';
-import { ANALYZERS, CATEGORY_LABEL, MODE_HELP, MODE_LABEL } from '@/lib/domain';
-import type { Analyzer, StartRunBody } from '@/lib/types';
+import { ANALYZERS, CATEGORY_LABEL, MODE_HELP, MODE_LABEL, VERIFICATION_OFF } from '@/lib/domain';
+import type { Analyzer, RepoView, StartRunBody } from '@/lib/types';
 
 type Mode = StartRunBody['mode'];
 const MAX_FILES = 150;
@@ -20,11 +20,14 @@ function CheckList<T extends string>({
   selected,
   onChange,
   label,
+  unavailable = () => null,
 }: {
   items: readonly T[];
   selected: T[];
   onChange: (v: T[]) => void;
   label: (v: T) => string;
+  // Why an item cannot be ticked, or null when it can.
+  unavailable?: (v: T) => string | null;
 }) {
   const id = useId();
   return (
@@ -34,10 +37,12 @@ function CheckList<T extends string>({
           <Checkbox
             id={`${id}-${item}`}
             checked={selected.includes(item)}
+            disabled={!!unavailable(item)}
             onCheckedChange={(on) => onChange(on ? [...selected, item] : selected.filter((x) => x !== item))}
           />
           <Label htmlFor={`${id}-${item}`} className="truncate font-normal">
             {label(item)}
+            {unavailable(item) ? <span className="text-xs text-muted-foreground"> · {unavailable(item)}</span> : null}
           </Label>
         </div>
       ))}
@@ -45,7 +50,7 @@ function CheckList<T extends string>({
   );
 }
 
-export function StartAuditDialog({ repos, disabled }: { repos: string[]; disabled: boolean }) {
+export function StartAuditDialog({ repos, disabled }: { repos: Pick<RepoView, 'name' | 'verification'>[]; disabled: boolean }) {
   const [open, setOpen] = useState(false);
   const [selectedRepos, setRepos] = useState<string[]>([]);
   const [analyzers, setAnalyzers] = useState<Analyzer[]>([]);
@@ -61,7 +66,14 @@ export function StartAuditDialog({ repos, disabled }: { repos: string[]; disable
   const sweep = mode === 'full' && untilCovered;
   const limit = Number(sessionLimit);
   const limitValid = !sweep || (Number.isInteger(limit) && limit >= 10 && limit <= 99);
-  const scope = selectedRepos.length ? selectedRepos.join(', ') : 'every repository';
+  const validating = mode === 'validate';
+  const verificationOf = new Map(repos.map((r) => [r.name, r.verification]));
+  const unavailable = (name: string) => {
+    const v = verificationOf.get(name);
+    return validating && v && v !== 'on' ? VERIFICATION_OFF[v] : null;
+  };
+  const canValidate = repos.some((r) => r.verification === 'on');
+  const scope = selectedRepos.length ? selectedRepos.join(', ') : validating ? 'every repository with verification on' : 'every repository';
   const which = analyzers.length ? analyzers.map((a) => CATEGORY_LABEL[a]).join(', ') : 'the analyzers configured per repository';
 
   const submit = () =>
@@ -70,7 +82,7 @@ export function StartAuditDialog({ repos, disabled }: { repos: string[]; disable
         repos: selectedRepos,
         mode,
         max_files: maxFilesValue,
-        analyzers,
+        analyzers: validating ? [] : analyzers,
         until_covered: sweep,
         session_limit: sweep ? limit : null,
       },
@@ -99,10 +111,16 @@ export function StartAuditDialog({ repos, disabled }: { repos: string[]; disable
         >
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Mode</legend>
-            <RadioGroup value={mode} onValueChange={(v) => setMode(v as Mode)}>
+            <RadioGroup
+              value={mode}
+              onValueChange={(v) => {
+                setMode(v as Mode);
+                if (v === 'validate') setRepos((rs) => rs.filter((r) => verificationOf.get(r) === 'on'));
+              }}
+            >
               {(Object.keys(MODE_LABEL) as Mode[]).map((m) => (
                 <div key={m} className="flex items-start gap-2">
-                  <RadioGroupItem id={`${id}-${m}`} value={m} className="mt-0.5" />
+                  <RadioGroupItem id={`${id}-${m}`} value={m} className="mt-0.5" disabled={m === 'validate' && !canValidate} />
                   <Label htmlFor={`${id}-${m}`} className="flex flex-col items-start gap-0.5 font-normal">
                     <span className="font-medium">{MODE_LABEL[m]}</span>
                     <span className="text-xs text-muted-foreground">{MODE_HELP[m]}</span>
@@ -116,10 +134,10 @@ export function StartAuditDialog({ repos, disabled }: { repos: string[]; disable
             <legend className="text-sm font-medium">
               Repositories <span className="font-normal text-muted-foreground">· none ticked means all</span>
             </legend>
-            <CheckList items={repos} selected={selectedRepos} onChange={setRepos} label={(r) => r} />
+            <CheckList items={repos.map((r) => r.name)} selected={selectedRepos} onChange={setRepos} label={(r) => r} unavailable={unavailable} />
           </fieldset>
 
-          {mode !== 'speculative' ? (
+          {mode !== 'speculative' && !validating ? (
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">
                 Analyzers <span className="font-normal text-muted-foreground">· none ticked means as configured; the verifier always runs</span>
@@ -130,14 +148,16 @@ export function StartAuditDialog({ repos, disabled }: { repos: string[]; disable
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor={`${id}-max`}>{mode === 'speculative' ? 'Candidates to review' : 'Files per repository'}</Label>
+              <Label htmlFor={`${id}-max`}>
+                {mode === 'speculative' ? 'Candidates to review' : validating ? 'Findings per repository' : 'Files per repository'}
+              </Label>
               <Input
                 id={`${id}-max`}
                 type="number"
                 inputMode="numeric"
                 min={1}
                 max={MAX_FILES}
-                placeholder={mode === 'speculative' ? '30' : 'From repos.yaml'}
+                placeholder={mode === 'speculative' ? '30' : validating ? '10' : 'From repos.yaml'}
                 value={maxFiles}
                 onChange={(e) => setMaxFiles(e.target.value)}
                 aria-invalid={!maxFilesValid}
@@ -178,8 +198,8 @@ export function StartAuditDialog({ repos, disabled }: { repos: string[]; disable
           ) : null}
 
           <p className="rounded-md bg-muted p-3 text-sm">
-            {MODE_LABEL[mode]} audit of <strong>{scope}</strong>
-            {mode === 'speculative' ? '.' : <> with {which}.</>}
+            {validating ? 'Validation' : `${MODE_LABEL[mode]} audit`} of <strong>{scope}</strong>
+            {mode === 'speculative' ? '.' : validating ? '. Repositories with verification off are skipped.' : <> with {which}.</>}
             {sweep ? ` Repeats full passes, stopping before the 5-hour window passes ${sessionLimit}%.` : ''}
           </p>
 

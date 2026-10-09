@@ -49,7 +49,7 @@ program
   .addOption(
     new Option(
       '--mode <mode>',
-      'incremental audits changes since the last audited commit; speculative re-examines only unconfirmed candidates (--max-files caps them, default 30)',
+      'incremental audits changes since the last audited commit; speculative re-examines only unconfirmed candidates (--max-files caps them, default 30); validate tries to reproduce open findings still at the detected stage with a test (--max-files caps them, default 10)',
     ).argParser(parseMode),
   )
   .option('--repo <name>', 'only this repository (repeatable)', collect)
@@ -62,8 +62,8 @@ program
     'full mode: repeat passes until every file is audited since the sweep began, stopping before a pass would cross the session or weekly limit',
     false,
   )
-  .option('--session-limit <percent>', 'with --until-covered: 5-hour window ceiling (default 90)', parsePercent)
-  .option('--weekly-limit <percent>', 'with --until-covered: weekly window ceiling (default 95)', parsePercent)
+  .option('--session-limit <percent>', 'with --until-covered or --mode validate: 5-hour window ceiling (default 90)', parsePercent)
+  .option('--weekly-limit <percent>', 'with --until-covered or --mode validate: weekly window ceiling (default 95)', parsePercent)
   .option('--max-passes <n>', 'with --until-covered: at most this many passes per repository (default 30)', parseMaxPasses)
   .option('--sweep-since <iso>', 'with --until-covered: resume a sweep, counting the audits made since it began (its log gives the value)', (v: string) =>
     parseSweepSince(v),

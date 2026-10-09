@@ -264,6 +264,18 @@ describe('lifecycle stages', () => {
   });
 });
 
+describe('validation attempts', () => {
+  it("keeps a fingerprint's attempts across state rewrites, even after it leaves and re-enters the state", () => {
+    const store = memory();
+    store.writeRepoState('demo', state({ [FP1]: entry() }), { runId: 'run-1', at: 't1' });
+    store.recordAttempts('demo', [{ fingerprint: FP1, at: 't2', run_id: 'run-2', outcome: 'not_testable', reason: 'needs a queue' }]);
+    store.writeRepoState('demo', state({ [FP2]: entry({}, FP2) }), { runId: 'run-3', at: 't3' });
+    store.writeRepoState('demo', state({ [FP1]: entry(), [FP2]: entry({}, FP2) }), { runId: 'run-4', at: 't4' });
+    assert.deepEqual(store.validationAttempts('demo', FP1), [{ at: 't2', run_id: 'run-2', outcome: 'not_testable', reason: 'needs a queue' }]);
+    assert.deepEqual(store.validationAttempts('demo', FP2), []);
+  });
+});
+
 describe('reports and failures', () => {
   const report = (repo: string, runId: string, generatedAt: string) =>
     ({ schema: 'reposcout/report@1', repo, run_id: runId, generated_at: generatedAt }) as RepoReport;

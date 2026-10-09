@@ -43,6 +43,10 @@ function populated(): Store {
   store.decide('demo', CONFIRMED, { verdict: 'confirmed', reason: 'seen in production', decided_by: 'jorge', decided_at: 't2' });
   store.decide('demo', REFUTED, { verdict: 'refuted', reason: 'the input is validated upstream', decided_by: 'jorge', decided_at: 't2' });
   store.setLabels('demo', RELABELLED, { kind: 'chore' }, 'jorge', 't2');
+  store.recordAttempts('demo', [
+    { fingerprint: RELABELLED, at: 't2', run_id: 'run-v1', outcome: 'not_reproduced', reason: 'the test passed' },
+    { fingerprint: RELABELLED, at: 't2b', run_id: 'run-v2', outcome: 'not_testable', reason: 'needs a database' },
+  ]);
   const now = store.readRepoState('demo') as RepoState;
   store.writeRepoState(
     'demo',
@@ -72,7 +76,7 @@ function populated(): Store {
 const tempDir = () => mkdtempSync(join(tmpdir(), 'reposcout-backup-'));
 
 describe('an export restored into an empty database', () => {
-  it('reproduces the state, both histories, stages, decisions, labels, usage, yield, reports and failures', () => {
+  it('reproduces the state, both histories, stages, decisions, labels, attempts, usage, yield, reports and failures', () => {
     const source = populated();
     const dir = tempDir();
     writeExport(source, dir, 't4');
@@ -88,6 +92,8 @@ describe('an export restored into an empty database', () => {
     assert.deepEqual(restored.stagesFor('demo'), source.stagesFor('demo'));
     assert.deepEqual(restored.decisionsFor('demo'), source.decisionsFor('demo'));
     assert.deepEqual(restored.labelsFor('demo'), source.labelsFor('demo'));
+    assert.deepEqual(restored.attemptsFor('demo'), source.attemptsFor('demo'));
+    assert.equal(restored.validationAttempts('demo', RELABELLED).length, 2);
     assert.deepEqual(restored.census(), source.census());
     assert.deepEqual(restored.usage(), source.usage());
     assert.deepEqual(restored.yields(), source.yields());
@@ -112,6 +118,17 @@ describe('an export restored into an empty database', () => {
       [...restored.decisionsFor('demo').values()].map((d) => d.decided_on),
       ['speculative', 'speculative'],
     );
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('restores an export from before validation passes with no attempts', () => {
+    const dir = tempDir();
+    writeExport(populated(), dir, 't4');
+    rmSync(join(dir, 'validation-attempts.json'));
+    const restored = new Store(':memory:');
+    const summary = restoreExport(restored, dir);
+    assert.equal(summary.attempts, 0);
+    assert.equal(restored.attemptsFor('demo').size, 0);
     rmSync(dir, { recursive: true, force: true });
   });
 

@@ -54,12 +54,15 @@ function outcomeFacts(r: RepoProgress): string[] {
   return [
     r.mode,
     r.pass ? `pass ${r.pass}` : null,
-    r.selected != null ? plural(r.selected, 'file') : null,
+    r.selected != null ? plural(r.selected, r.mode === 'validate' ? 'finding' : 'file') : null,
     r.omitted ? `${r.omitted} over the cap` : null,
     r.pending != null ? `${r.pending} pending` : null,
     r.analyzers && r.analyzers.length < 5 ? r.analyzers.join(', ') : null,
     r.seconds != null ? formatDuration(r.seconds * 1000) : null,
-    o?.status === 'ok' ? `${o.new ?? 0} new · ${o.resolved ?? 0} resolved` : null,
+    o?.status === 'ok' && o.tried == null ? `${o.new ?? 0} new · ${o.resolved ?? 0} resolved` : null,
+    o?.status === 'ok' && o.tried != null
+      ? `${o.tried} tried · ${o.reproduced ?? 0} reproduced · ${o.not_reproduced ?? 0} not reproduced · ${o.not_testable ?? 0} not testable`
+      : null,
     o?.speculative ? `${o.speculative} speculative` : null,
     o?.refuted ? `${o.refuted} refuted` : null,
     o?.files_selected ? `read ${o.files_read}/${o.files_selected}` : null,

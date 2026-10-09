@@ -97,6 +97,16 @@ describe('webhook notifications', () => {
     assert.equal(viewFor(webhook({ min_severity: 'low' }), digest())?.repos[0]?.findings.length, 4);
   });
 
+  it('has nothing to say about a validation pass, which reports no finding as new', () => {
+    const validation = {
+      ...report('run-v', []),
+      mode: 'validate',
+      validation: { tried: 1, reproduced: [], not_reproduced: [], not_testable: [], unreviewed: [] },
+    };
+    const d = digestOf({ runId: 'run-v', date: '2026-10-08', reports: [validation as RepoReport], failures: [] });
+    assert.equal(viewFor(webhook({ min_severity: 'low' }), d), null);
+  });
+
   it('skips sending when nothing reaches the threshold and nothing failed', async () => {
     const quiet = digestOf({ runId: 'run-1', date: 'd', reports: [report('run-1', [reported('m', 'medium')])], failures: [] });
     const { calls, fetch } = fakeFetch([]);

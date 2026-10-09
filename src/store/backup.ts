@@ -25,6 +25,7 @@ export interface RestoreSummary {
   history: number;
   decisions: number;
   labels: number;
+  attempts: number;
   reports: number;
   usage: number;
   failures: number;
@@ -48,6 +49,7 @@ export function writeExport(store: Store, dir: string, at = new Date().toISOStri
   writeJson(join(dir, 'finding-stages.json'), s.stages);
   writeJson(join(dir, 'decisions.json'), s.decisions);
   writeJson(join(dir, 'labels.json'), s.labels);
+  writeJson(join(dir, 'validation-attempts.json'), s.attempts);
   writeJson(join(dir, 'analyzer-yield.json'), s.yields);
   writeFileSync(join(dir, 'reports.jsonl'), jsonLines(s.reports));
   writeJson(join(dir, 'failures.json'), s.failures);
@@ -98,6 +100,10 @@ export function restoreExport(store: Store, dir: string): RestoreSummary {
     for (const { repo, fingerprint, decided_on = 'speculative', ...d } of decisions) store.restoreDecision(repo, fingerprint, { ...d, decided_on });
     for (const { repo, fingerprint, ...o } of labels) store.restoreLabels(repo, fingerprint, o);
 
+    // An export from before validation passes has no attempts file.
+    const attempts = existsSync(join(dir, 'validation-attempts.json')) ? read<Snapshot['attempts']>(dir, 'validation-attempts.json') : [];
+    for (const [repo, rows] of groupBy(attempts, (a) => a.repo)) store.recordAttempts(repo, rows);
+
     const history = groupBy(read<Snapshot['history']>(dir, 'finding-history.json'), (e) => e.repo);
     const stages = groupBy(read<Snapshot['stages']>(dir, 'finding-stages.json'), (e) => e.repo);
     const summary: RestoreSummary = {
@@ -106,6 +112,7 @@ export function restoreExport(store: Store, dir: string): RestoreSummary {
       history: 0,
       decisions: decisions.length,
       labels: labels.length,
+      attempts: attempts.length,
       reports: 0,
       usage: 0,
       failures: 0,

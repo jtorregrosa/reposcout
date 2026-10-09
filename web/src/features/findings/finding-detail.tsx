@@ -51,6 +51,7 @@ import { FindingHistory } from './finding-history';
 import { LabelsEditor } from './labels-editor';
 import { StageTimeline } from './stage-timeline';
 import { SuppressDialog } from './suppress-dialog';
+import { ValidationAttempts } from './validation-attempts';
 
 function Section({ title, icon, children, className }: { title: string; icon?: ReactNode; children: ReactNode; className?: string }) {
   return (
@@ -291,6 +292,7 @@ export function FindingDetail({ finding: f, position, onPrevious, onNext, onClos
           </Alert>
         ) : null}
         {f.status === 'duplicate' ? <DuplicateNotice finding={f} /> : null}
+        <ValidationAttempts finding={f} />
 
         <Section title="Scenario">
           <Prose text={f.scenario} />

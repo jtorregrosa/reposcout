@@ -35,6 +35,18 @@ export function verificationFor(
   };
 }
 
+// Why a validation pass skips a repository, or null when the repository can run its tests here.
+export function verificationOffReason(
+  repo: Pick<RepoConfig, 'name' | 'test_command' | 'test_command_unsandboxed'>,
+  platform: NodeJS.Platform = process.platform,
+): string | null {
+  const state = verificationState(repo, platform);
+  if (state === 'on') return null;
+  return state === 'no-test-command'
+    ? 'verification off: no test_command configured'
+    : `verification off: Claude Code has no sandbox on ${platform}; set test_command_unsandboxed: true to run test_command anyway`;
+}
+
 // What the dashboard says about verification for a repository on this platform.
 export function verificationState(
   repo: Pick<RepoConfig, 'name' | 'test_command' | 'test_command_unsandboxed'>,

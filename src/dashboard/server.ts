@@ -283,6 +283,8 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
       if (history) return reply(200, store.findingHistory(decodeURIComponent(history[1] as string), history[2] as string));
       const stages = /^\/api\/findings\/([^/]+)\/([0-9a-f]{32})\/stages$/.exec(url.pathname);
       if (stages) return reply(200, store.stageHistory(decodeURIComponent(stages[1] as string), stages[2] as string));
+      const validations = /^\/api\/findings\/([^/]+)\/([0-9a-f]{32})\/validations$/.exec(url.pathname);
+      if (validations) return reply(200, store.validationAttempts(decodeURIComponent(validations[1] as string), validations[2] as string));
       const m = /^\/api\/runs\/([^/]+)\/events$/.exec(url.pathname);
       if (m) {
         const file = runEventsFile(root, decodeURIComponent(m[1] as string));

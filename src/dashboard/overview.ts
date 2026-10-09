@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { ANALYZERS } from '../config/analyzers.js';
 import { loadConfig, type RepoConfig } from '../config/config.js';
 import { errorMessage } from '../errors.js';
+import { MAX_UNSUCCESSFUL_ATTEMPTS } from '../findings/validation.js';
 import { layout as layoutOf } from '../paths.js';
 import { verificationState } from '../security/sandbox.js';
 import { auditsByAnalyzer, costPerFile, fullRunPace, fullyAudited } from '../state/coverage.js';
@@ -72,6 +73,7 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
     refuted: 0,
     duplicate: 0,
     new_last_run: 0,
+    to_validate: 0,
     by_severity: { critical: 0, high: 0, medium: 0, low: 0 },
   };
   // repos.yaml is the source of truth for suppressions; state catches up on the next run, so the UI shows
@@ -80,6 +82,7 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
   const decisions = store.decisionsFor(repo.name);
   const labels = store.labelsFor(repo.name);
   const stages = store.stagesFor(repo.name);
+  const attempts = store.attemptsFor(repo.name);
   for (const [fingerprint, entry] of Object.entries(state?.findings ?? {})) {
     let status = entry.status;
     let pending = false;
@@ -90,6 +93,15 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
     counts[status] = (counts[status] ?? 0) + 1;
     if (status === 'open') counts.by_severity[entry.finding.severity] = (counts.by_severity[entry.finding.severity] ?? 0) + 1;
     if (isNew) counts.new_last_run++;
+    const tries = (attempts.get(fingerprint) ?? []).filter((a) => a.outcome !== 'reproduced').length;
+    if (
+      status === 'open' &&
+      (stages.get(fingerprint)?.stage ?? 'detected') === 'detected' &&
+      !decisions.has(fingerprint) &&
+      tries < MAX_UNSUCCESSFUL_ATTEMPTS
+    ) {
+      counts.to_validate++;
+    }
     findings.push({
       ...entry.finding,
       fingerprint,

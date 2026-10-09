@@ -207,4 +207,17 @@ export const MIGRATIONS: string[] = [
   -- The status a decision was made on. Until open findings could be decided, every decision was on a speculative one.
   ALTER TABLE triage ADD COLUMN decided_on TEXT NOT NULL DEFAULT 'speculative' CHECK (decided_on IN ('speculative', 'open'));
   `,
+  `
+  -- Each try of a validation pass to reproduce an open finding with a test. Kept apart from findings, which a run
+  -- rewrites, and kept after the fingerprint leaves the state, so a finding is not tried more than its limit.
+  CREATE TABLE validation_attempts (
+    repo TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    at TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    outcome TEXT NOT NULL CHECK (outcome IN ('reproduced', 'not_reproduced', 'not_testable')),
+    reason TEXT,
+    PRIMARY KEY (repo, fingerprint, run_id)
+  );
+  `,
 ];

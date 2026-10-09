@@ -4,6 +4,7 @@ import { GIT_SUBCOMMANDS, toPosix } from '../claude/settings.js';
 import type { Analyzer, Mode } from '../config/analyzers.js';
 import type { RepoConfig } from '../config/config.js';
 import type { FindingsState } from '../findings/types.js';
+import type { ValidationCandidate } from '../findings/validation.js';
 import { redact } from '../security/secrets.js';
 import type { Candidate } from '../selection/select.js';
 import type { SpeculativeCandidate } from './plan.js';
@@ -32,6 +33,10 @@ export interface Manifest {
     SpeculativeCandidate,
     'fingerprint' | 'file' | 'line' | 'category' | 'severity' | 'title' | 'description' | 'scenario' | 'suggested_fix' | 'snippet'
   > & { unconfirmed: string | null })[];
+  validation_candidates?: Pick<
+    ValidationCandidate,
+    'fingerprint' | 'file' | 'line' | 'category' | 'severity' | 'title' | 'description' | 'scenario' | 'repro' | 'snippet' | 'previous_attempts'
+  >[];
   git_commands: string[];
   verification: { enabled: true; worktree_path: string; test_command: string } | { enabled: false };
   output_path: string;
@@ -112,6 +117,7 @@ export function buildManifest({
   known,
   falsePositives = [],
   speculative,
+  validation = null,
   verifyDir,
   outputPath,
 }: {
@@ -128,6 +134,7 @@ export function buildManifest({
   known: Manifest['known_findings'];
   falsePositives?: KnownFalsePositive[];
   speculative: SpeculativeCandidate[] | null;
+  validation?: ValidationCandidate[] | null;
   verifyDir: string | null;
   outputPath: string;
 }): Manifest {
@@ -163,6 +170,23 @@ export function buildManifest({
             suggested_fix: c.suggested_fix,
             snippet: c.snippet,
             unconfirmed: c.unconfirmed ?? null,
+          })),
+        }
+      : {}),
+    ...(validation
+      ? {
+          validation_candidates: validation.map((c) => ({
+            fingerprint: c.fingerprint,
+            file: c.file,
+            line: c.line,
+            category: c.category,
+            severity: c.severity,
+            title: c.title,
+            description: c.description,
+            scenario: c.scenario,
+            repro: c.repro,
+            snippet: c.snippet,
+            previous_attempts: c.previous_attempts.map((r) => redact(r)),
           })),
         }
       : {}),

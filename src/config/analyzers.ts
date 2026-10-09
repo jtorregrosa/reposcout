@@ -33,7 +33,7 @@ export function checkMaxFiles(value: unknown, label: string): number {
   return n;
 }
 
-export const MODES = ['incremental', 'full', 'speculative'] as const;
+export const MODES = ['incremental', 'full', 'speculative', 'validate'] as const;
 export type Mode = (typeof MODES)[number];
 export const isMode = (value: unknown): value is Mode => (MODES as readonly unknown[]).includes(value);
 

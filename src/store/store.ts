@@ -5,7 +5,7 @@ import { ANALYZERS, type Analyzer } from '../config/analyzers.js';
 import { nextStage, type Stage, type StageChange, type StageEvent, type StageState, withdrawnStage } from '../findings/stage.js';
 import type { Finding, FindingEntry, FindingStatus, FindingsState, Kind, Repro } from '../findings/types.js';
 import type { AnalyzerYield, Failures, RepoReport, RunResult, YieldRow } from '../report/types.js';
-import type { AuditsByAnalyzer, Census, Decision, FindingEvent, LabelOverride, RepoState, UsageRow } from '../state/types.js';
+import type { AuditsByAnalyzer, Census, Decision, FindingEvent, LabelOverride, RepoState, UsageRow, ValidationAttempt } from '../state/types.js';
 import { MIGRATIONS } from './schema.js';
 
 // What precision needs to know of one finding: how it ended and which run first proposed it, with that run's
@@ -116,6 +116,7 @@ export interface Snapshot {
   stages: Keyed<StageEvent>[];
   decisions: Keyed<Decision>[];
   labels: Keyed<LabelOverride>[];
+  attempts: Keyed<ValidationAttempt>[];
   yields: YieldRow[];
   reports: { date: string; report: RepoReport }[];
   failures: { date: string; repo: string; error: string; deferred: boolean; at: string }[];
@@ -457,6 +458,9 @@ export class Store {
             'personal_data'
           > & { personal_data: number | null })[]
         ).map((l) => ({ ...l, personal_data: l.personal_data == null ? null : l.personal_data === 1 })),
+        attempts: this.db
+          .prepare('SELECT repo, fingerprint, at, run_id, outcome, reason FROM validation_attempts ORDER BY repo, fingerprint, at')
+          .all() as Snapshot['attempts'],
         yields: this.yields(Number.MAX_SAFE_INTEGER),
         reports: (this.db.prepare('SELECT date, data FROM reports ORDER BY date, generated_at, run_id').all() as { date: string; data: string }[]).map((r) => ({
           date: r.date,
@@ -633,6 +637,25 @@ export class Store {
         return { ...entry, finding };
       })
       .immediate();
+  }
+
+  // Every validation attempt of a repository, oldest first per fingerprint.
+  attemptsFor(repo: string): Map<string, ValidationAttempt[]> {
+    const rows = this.db
+      .prepare('SELECT fingerprint, at, run_id, outcome, reason FROM validation_attempts WHERE repo = ? ORDER BY at, run_id')
+      .all(repo) as (ValidationAttempt & { fingerprint: string })[];
+    const out = new Map<string, ValidationAttempt[]>();
+    for (const { fingerprint, ...a } of rows) out.set(fingerprint, [...(out.get(fingerprint) ?? []), a]);
+    return out;
+  }
+
+  validationAttempts(repo: string, fingerprint: string): ValidationAttempt[] {
+    return this.attemptsFor(repo).get(fingerprint) ?? [];
+  }
+
+  recordAttempts(repo: string, attempts: (ValidationAttempt & { fingerprint: string })[]): void {
+    const insert = this.db.prepare('INSERT OR REPLACE INTO validation_attempts (repo, fingerprint, at, run_id, outcome, reason) VALUES (?, ?, ?, ?, ?, ?)');
+    for (const a of attempts) insert.run(repo, a.fingerprint, a.at, a.run_id, a.outcome, a.reason);
   }
 
   findingExists(repo: string, fingerprint: string): boolean {

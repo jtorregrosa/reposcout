@@ -23,8 +23,18 @@ export interface RunFlags {
 
 const SWEEP_DEFAULTS = { sessionLimit: 90, weeklyLimit: 95, maxPasses: 30 };
 
+export function validateRunFlags(flags: RunFlags): void {
+  if (flags.mode === 'validate' && flags.analyzers?.length) throw new Error('a validation pass takes no analyzers; drop --analyzers with --mode validate');
+  if (!flags.untilCovered && flags.mode !== 'validate' && (flags.sessionLimit != null || flags.weeklyLimit != null)) {
+    throw new Error('--session-limit and --weekly-limit only apply with --until-covered or --mode validate');
+  }
+  if (!flags.untilCovered && (flags.maxPasses != null || flags.sweepSince != null))
+    throw new Error('--max-passes and --sweep-since only apply with --until-covered');
+}
+
 export async function runCommand(flags: RunFlags): Promise<ExitCode> {
   loadEnv(ROOT);
+  validateRunFlags(flags);
   let mode = flags.mode;
   let sweep = null;
   if (flags.untilCovered) {
@@ -36,9 +46,11 @@ export async function runCommand(flags: RunFlags): Promise<ExitCode> {
       maxPasses: flags.maxPasses ?? SWEEP_DEFAULTS.maxPasses,
       ...(flags.sweepSince ? { since: flags.sweepSince } : {}),
     };
-  } else if (flags.sessionLimit != null || flags.weeklyLimit != null || flags.maxPasses != null || flags.sweepSince != null) {
-    throw new Error('--session-limit, --weekly-limit, --max-passes and --sweep-since only apply with --until-covered');
   }
+  const validation =
+    mode === 'validate'
+      ? { sessionLimit: (flags.sessionLimit ?? SWEEP_DEFAULTS.sessionLimit) / 100, weeklyLimit: (flags.weeklyLimit ?? SWEEP_DEFAULTS.weeklyLimit) / 100 }
+      : null;
 
   const repos = loadConfig(resolve(ROOT, flags.config)).filter((r) => !flags.repo?.length || flags.repo.includes(r.name));
   if (repos.length === 0) throw new Error(`no repository in ${flags.config} matches --repo ${flags.repo?.join(', ')}`);
@@ -49,5 +61,6 @@ export async function runCommand(flags: RunFlags): Promise<ExitCode> {
     repos,
     opts: { mode, analyzers: flags.analyzers, maxFiles: flags.maxFiles, prepareOnly: flags.prepareOnly, auth: flags.auth },
     sweep,
+    validation,
   });
 }

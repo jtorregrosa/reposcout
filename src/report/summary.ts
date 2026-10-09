@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { ANALYZERS, type Analyzer, type Mode } from '../config/analyzers.js';
 import type { ClosedFinding } from '../findings/classify.js';
 import { type Discard, type Finding, type Rejection, SEVERITY_RANK, type Severity } from '../findings/types.js';
+import type { ValidationBlock } from '../findings/validation.js';
 import type { Failures, RepoReport } from './types.js';
 
 interface Located {
@@ -52,6 +53,8 @@ export interface RepoDay {
   seconds: number;
   // Why the latest run could not reproduce anything with a test, or null when it could (or did not say).
   verification_off: string | null;
+  // What the day's validation passes tried, summed, and reproduced; null when none ran.
+  validation: { tried: number; reproduced: ValidationBlock['reproduced'] } | null;
 }
 
 // Union by fingerprint; the latest occurrence wins, in the order it was first seen.
@@ -101,6 +104,12 @@ export function aggregateDay(reports: RepoReport[]): RepoDay {
     subagent_runs: sumOrNull(reports.map((r) => r.usage?.subagent_runs)),
     seconds: Math.round(reports.reduce((s, r) => s + (r.usage?.wall_ms ?? r.usage?.duration_ms ?? 0), 0) / 1000),
     verification_off: last.verification?.enabled === false ? (last.verification.reason ?? 'disabled') : null,
+    validation: reports.some((r) => r.validation)
+      ? {
+          tried: reports.reduce((s, r) => s + (r.validation?.tried ?? 0), 0),
+          reproduced: union(all((r) => r.validation?.reproduced)),
+        }
+      : null,
   };
 }
 
@@ -153,6 +162,13 @@ function repoSection(d: RepoDay): string {
   );
   if (d.verification_off) {
     out.push(`> **Verification is off** (${d.verification_off}): no finding here was reproduced by a test; each was confirmed from the code only.`, '');
+  }
+  if (d.validation) {
+    out.push(`**Validation:** ${d.validation.reproduced.length} of ${d.validation.tried} findings tried were reproduced by a test.`, '');
+    if (d.validation.reproduced.length) {
+      out.push('### Reproduced', '', '| Location | Title |', '| --- | --- |');
+      out.push(...d.validation.reproduced.map((f) => `| \`${cell(f.file)}:${f.line}\` | ${cell(f.title)} |`), '');
+    }
   }
   if (d.fresh.length) {
     out.push('### New', '', '| Severity | Category | Location | Title | Confidence |', '| --- | --- | --- | --- | --- |', ...findingRows(d.fresh), '');

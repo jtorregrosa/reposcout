@@ -34,6 +34,11 @@ export interface SweepOptions {
   since?: string;
 }
 
+export interface ValidationOptions {
+  sessionLimit: number;
+  weeklyLimit: number;
+}
+
 export type RepoOutcome =
   | { status: 'skipped'; reason: string; complete?: boolean }
   | { status: 'prepared'; manifest: string }
@@ -44,6 +49,11 @@ export type RepoOutcome =
       confirmed?: number;
       speculative: number;
       refuted?: number;
+      tried?: number;
+      reproduced?: number;
+      not_reproduced?: number;
+      not_testable?: number;
+      unreviewed?: number;
       files_read?: number;
       files_selected?: number;
       pending?: number;

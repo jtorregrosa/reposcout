@@ -1,6 +1,7 @@
 import type { Analyzer, Mode } from '../config/analyzers.js';
 import type { ClosedFinding, ReportedFinding } from '../findings/classify.js';
 import type { Discard, Finding, Rejection } from '../findings/types.js';
+import type { ValidationBlock } from '../findings/validation.js';
 import type { WindowCost } from '../state/types.js';
 
 export const REPORT_SCHEMA = 'reposcout/report@1';
@@ -105,6 +106,8 @@ export interface RepoReport {
   specialist_model?: string;
   verification?: VerificationInfo;
   yield?: AnalyzerYield[];
+  // What a validation pass tried and how each try ended.
+  validation?: ValidationBlock;
 }
 
 export interface FailureEntry {

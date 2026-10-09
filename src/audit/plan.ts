@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { ANALYZERS, type Analyzer, type Mode } from '../config/analyzers.js';
 import type { RepoConfig } from '../config/config.js';
 import { type Finding, SEVERITY_RANK } from '../findings/types.js';
+import { DEFAULT_VALIDATION_LIMIT, pickValidationCandidates, type ValidationCandidate } from '../findings/validation.js';
 import { changedFiles, ensureBaseCommit, type Git, trackedFiles } from '../git/git.js';
 import type { Candidate } from '../selection/select.js';
 import type { RepoState } from '../state/types.js';
@@ -22,7 +23,11 @@ export interface AuditPlan {
   candidates: Candidate[];
   deleted: string[];
   speculativeCandidates: SpeculativeCandidate[];
+  validationCandidates: ValidationCandidate[];
 }
+
+// What a validation pass needs beyond the repository's state to pick its findings.
+export type ValidationInputs = Omit<Parameters<typeof pickValidationCandidates>[0], 'findings' | 'fileExists' | 'limit'>;
 
 export type PlanResult = { skip: string } | { plan: AuditPlan };
 
@@ -37,6 +42,7 @@ export function planAudit({
   head,
   cloneDir,
   log,
+  validation,
 }: {
   repo: RepoConfig;
   opts: AuditOptions;
@@ -45,11 +51,14 @@ export function planAudit({
   head: string;
   cloneDir: string;
   log: Logger;
+  validation?: ValidationInputs;
 }): PlanResult {
   let mode: Mode = opts.mode ?? repo.mode ?? 'incremental';
-  // Speculative mode re-examines only the candidates the verifier could not confirm, with no specialists.
+  // Speculative mode re-examines only the candidates the verifier could not confirm, and validate mode tries to
+  // reproduce the open findings still at detected: neither runs specialists.
   const speculative = mode === 'speculative';
-  const analyzers = speculative ? [] : (opts.analyzers ?? repo.analyzers);
+  const validating = mode === 'validate';
+  const analyzers = speculative || validating ? [] : (opts.analyzers ?? repo.analyzers);
   // Each analyzer remembers the commit it last audited, so a run with a subset never hides changes from the rest.
   const lastByAnalyzer = previous?.last_commit_by_analyzer ?? Object.fromEntries(ANALYZERS.map((a) => [a, previous?.last_commit ?? null]));
   const bases = [...new Set(analyzers.map((a) => lastByAnalyzer[a] ?? null))];
@@ -65,9 +74,30 @@ export function planAudit({
   if (mode === 'incremental' && !bases.every((b) => b === head || (b && ensureBaseCommit({ git, sha: b, log })))) mode = 'full';
 
   const fromBases = bases.filter((b): b is string => !!b && b !== head);
-  const plan: AuditPlan = { mode, analyzers, lastByAnalyzer, base, fromBases, candidates: [], deleted: [], speculativeCandidates: [] };
+  const plan: AuditPlan = {
+    mode,
+    analyzers,
+    lastByAnalyzer,
+    base,
+    fromBases,
+    candidates: [],
+    deleted: [],
+    speculativeCandidates: [],
+    validationCandidates: [],
+  };
 
-  if (speculative) {
+  if (validating) {
+    plan.validationCandidates = pickValidationCandidates({
+      stages: new Map(),
+      decisions: new Map(),
+      suppressed: new Set(repo.suppressed.map((s) => s.fingerprint)),
+      attempts: new Map(),
+      ...validation,
+      findings: previous?.findings,
+      fileExists: (file) => existsSync(join(cloneDir, file)),
+      limit: opts.maxFiles ?? DEFAULT_VALIDATION_LIMIT,
+    });
+  } else if (speculative) {
     plan.speculativeCandidates = Object.entries(previous?.findings ?? {})
       .filter(([, e]) => e.status === 'speculative' && existsSync(join(cloneDir, e.finding.file)))
       .sort(

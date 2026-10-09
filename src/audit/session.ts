@@ -91,7 +91,7 @@ export async function runAuditSession(input: SessionInput): Promise<SessionOutco
     run = await call(`/audit ${toPosix(cloneDir)} ${range} ${mode} ${toPosix(manifestPath)}`, false, timeoutMs);
     // The orchestrator waits for background specialists by ending its turn. When the last ones report while it
     // is still mid-turn, it can end believing some are outstanding, and the session closes with no output.
-    if (mode !== 'speculative' && run.result?.subtype === 'success' && !run.cancelled && !run.timedOut && !existsSync(rawOutput)) {
+    if (mode !== 'speculative' && mode !== 'validate' && run.result?.subtype === 'success' && !run.cancelled && !run.timedOut && !existsSync(rawOutput)) {
       const said = String(run.result.result ?? '').slice(0, 200);
       const remaining = resumeBudget(deadline);
       if (remaining === null) {

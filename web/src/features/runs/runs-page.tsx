@@ -102,7 +102,7 @@ export function RunsPage() {
               </SelectContent>
             </Select>
             {running && !runId ? <CancelRun runId={current.runId} /> : null}
-            <StartAuditDialog repos={ov.repos.map((r) => r.name)} disabled={running} />
+            <StartAuditDialog repos={ov.repos} disabled={running} />
           </>
         }
       />

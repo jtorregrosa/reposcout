@@ -340,6 +340,29 @@ describe('startRun', () => {
     );
     assert.equal(calls.length, 0);
   });
+
+  it('starts a validation pass only for repositories that can run their tests, with no analyzers', () => {
+    const { calls, spawnFn } = capture();
+    assert.equal(
+      status(() => startRun({ root, configPath, repos: ['demo'], mode: 'validate' }, { spawnFn })),
+      400,
+      'demo has no test_command',
+    );
+    const testable = join(root, 'repos-testable.yaml');
+    writeFileSync(
+      testable,
+      readFileSync(configPath, 'utf8').replace(
+        '    suppressed: []\n',
+        '    suppressed: []\n    test_command: node --version\n    test_command_unsandboxed: true\n',
+      ),
+    );
+    startRun({ root, configPath: testable, repos: ['demo'], mode: 'validate', maxFiles: 5, sessionLimit: 70 }, { spawnFn });
+    assert.deepEqual(calls[0]?.args.slice(-9), ['run', '--mode', 'validate', '--repo', 'demo', '--max-files', '5', '--session-limit', '70']);
+    assert.equal(
+      status(() => startRun({ root, configPath: testable, repos: ['demo'], mode: 'validate', analyzers: ['security'] }, { spawnFn })),
+      400,
+    );
+  });
 });
 
 describe('requestCancel', () => {
