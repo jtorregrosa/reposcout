@@ -105,7 +105,7 @@ The backfill commands SHALL restrict the work to the repositories named by `--re
 - **THEN** the command prints an error and exits with code 1
 
 ### Requirement: Visible on the Runs page
-While a backfill runs, it SHALL hold `state/.lock`, write an event log under `reports/<date>/logs/` that the lock points at, report each batch's progress ("batch <n> of <total>: <k> of <m> findings labelled" or "got steps"), and record a usage row per successful batch with mode `backfill-kind` or `backfill-repro`, so the dashboard's Runs and Usage pages show it.
+While a backfill runs, it SHALL hold `state/.lock`, write an event log under `reports/<date>/logs/` that the lock points at, report each batch's progress ("batch <n> of <total>: <k> of <m> findings labelled" or "got steps"), and record a usage row per successful batch with mode `backfill-kind` or `backfill-repro`, so the dashboard's Runs and Insights pages show it.
 
 #### Scenario: Following a backfill in the dashboard
 - **WHEN** a backfill is running and the dashboard is open
