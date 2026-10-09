@@ -175,6 +175,94 @@ describe('repository state', () => {
   });
 });
 
+describe('lifecycle stages', () => {
+  const FP3 = 'c'.repeat(32);
+  const FP4 = 'd'.repeat(32);
+  const stageOf = (store: Store, fp = FP1) => store.stagesFor('demo').get(fp)?.stage;
+
+  it('gives every finding in an older database its initial stage, recorded as an upgrade', () => {
+    const file = join(tempRoot(), 'old.db');
+    const old = new Database(file);
+    old.exec(MIGRATIONS.slice(0, -1).join('\n'));
+    old.pragma(`user_version = ${MIGRATIONS.length - 1}`);
+    const insert = old.prepare(
+      `INSERT INTO findings (repo, fingerprint, status, severity, category, file, first_seen, last_seen, finding)
+       VALUES ('demo', ?, ?, 'high', 'logic', 'src/a.cs', 't0', 't0', ?)`,
+    );
+    insert.run(FP1, 'resolved', JSON.stringify({ ...entry().finding, verified: false }));
+    insert.run(FP2, 'open', JSON.stringify({ ...entry().finding, verified: true }));
+    insert.run(FP3, 'speculative', JSON.stringify({ ...entry().finding, verified: false }));
+    insert.run(FP4, 'open', JSON.stringify({ ...entry().finding, verified: false }));
+    old
+      .prepare(`INSERT INTO triage (repo, fingerprint, verdict, reason, decided_by, decided_at) VALUES ('demo', ?, 'confirmed', 'seen in prod', 'jorge', 't0')`)
+      .run(FP4);
+    old.close();
+    const store = new Store(file);
+    assert.deepEqual(
+      [FP1, FP2, FP3, FP4].map((fp) => stageOf(store, fp)),
+      ['fixed', 'validated', 'detected', 'validated'],
+    );
+    for (const fp of [FP1, FP2, FP3, FP4]) {
+      const history = store.stageHistory('demo', fp);
+      assert.equal(history.length, 1);
+      assert.equal(history[0]?.source, 'upgrade');
+      assert.equal(history[0]?.from_stage, null);
+    }
+    store.close();
+  });
+
+  it('records the initial stage of a new finding with the run that found it', () => {
+    const store = memory();
+    store.writeRepoState('demo', state({ [FP1]: entry() }), { runId: 'run-1', at: 't1' });
+    assert.deepEqual(store.stageHistory('demo', FP1), [
+      { at: 't1', run_id: 'run-1', from_stage: null, to_stage: 'detected', source: 'initial', note: null, actor: null },
+    ]);
+  });
+
+  it('keeps the stage across a run that rewrites the state', () => {
+    const store = memory();
+    store.writeRepoState('demo', state({ [FP1]: entry({ finding: { ...entry().finding, verified: true } }) }), { runId: 'run-1', at: 't1' });
+    store.writeRepoState('demo', state({ [FP1]: entry({ last_seen: 't2' }) }), { runId: 'run-2', at: 't2' });
+    assert.equal(stageOf(store), 'validated');
+    assert.equal(store.stageHistory('demo', FP1).length, 1);
+  });
+
+  it('validates a detected finding when a later run reproduces it', () => {
+    const store = memory();
+    store.writeRepoState('demo', state({ [FP1]: entry() }), { runId: 'run-1', at: 't1' });
+    store.writeRepoState('demo', state({ [FP1]: entry({ finding: { ...entry().finding, verified: true } }) }), { runId: 'run-2', at: 't2' });
+    assert.deepEqual(store.stagesFor('demo').get(FP1), { stage: 'validated', source: 'reproduced', since: 't2' });
+  });
+
+  it('moves a resolved finding to fixed and a reopened one back to its earlier stage', () => {
+    const store = memory();
+    const verified = { ...entry().finding, verified: true };
+    store.writeRepoState('demo', state({ [FP1]: entry({ finding: verified }) }), { runId: 'run-1', at: 't1' });
+    store.writeRepoState('demo', state({ [FP1]: entry({ status: 'resolved', resolution: 'file deleted', finding: verified }) }), { runId: 'run-2', at: 't2' });
+    assert.equal(stageOf(store), 'fixed');
+    assert.equal(store.stageHistory('demo', FP1).at(-1)?.note, 'file deleted');
+    store.writeRepoState('demo', state({ [FP1]: entry({ reopened_at: 't3', finding: { ...verified, verified: false } }) }), { runId: 'run-3', at: 't3' });
+    assert.deepEqual(store.stagesFor('demo').get(FP1), { stage: 'validated', source: 'reopened', since: 't3' });
+  });
+
+  it('drops the stage of a fingerprint that leaves the state, and starts afresh if it returns', () => {
+    const store = memory();
+    store.writeRepoState('demo', state({ [FP1]: entry({ status: 'resolved' }), [FP2]: entry({}, FP2) }), { runId: 'run-1', at: 't1' });
+    store.writeRepoState('demo', state({ [FP2]: entry({}, FP2) }), { runId: 'run-2', at: 't2' });
+    assert.equal(stageOf(store), undefined);
+    assert.equal(store.stageHistory('demo', FP1).length, 1, 'the history outlives the fingerprint');
+    store.writeRepoState('demo', state({ [FP1]: entry(), [FP2]: entry({}, FP2) }), { runId: 'run-3', at: 't3' });
+    assert.deepEqual(store.stagesFor('demo').get(FP1), { stage: 'detected', source: 'initial', since: 't3' });
+  });
+
+  it('keeps the stage while a finding is suppressed', () => {
+    const store = memory();
+    store.writeRepoState('demo', state({ [FP1]: entry({ finding: { ...entry().finding, verified: true } }) }), { runId: 'run-1', at: 't1' });
+    store.writeRepoState('demo', state({ [FP1]: entry({ status: 'suppressed', reason: 'by design' }) }), { runId: 'run-2', at: 't2' });
+    assert.equal(stageOf(store), 'validated');
+  });
+});
+
 describe('reports and failures', () => {
   const report = (repo: string, runId: string, generatedAt: string) =>
     ({ schema: 'reposcout/report@1', repo, run_id: runId, generated_at: generatedAt }) as RepoReport;
@@ -250,6 +338,13 @@ describe('import of the JSON state', () => {
       store.findingHistory('demo', FP1).map((e) => `${e.from_status}->${e.to_status}@${e.at}`),
       ['null->open@2026-10-01T00:00:00.000Z', 'open->resolved@2026-10-04T00:00:00.000Z'],
     );
+  });
+
+  it('gives imported findings their initial stage', () => {
+    const store = openStore(layout(legacyRoot()));
+    assert.equal(store.stagesFor('demo').get(FP1)?.stage, 'fixed');
+    assert.equal(store.stagesFor('demo').get(FP2)?.stage, 'detected');
+    assert.equal(store.stageHistory('demo', FP1)[0]?.source, 'initial');
   });
 
   it('imports only once', () => {

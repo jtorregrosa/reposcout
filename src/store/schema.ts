@@ -162,4 +162,45 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX analyzer_yield_by_time ON analyzer_yield (at);
   `,
+  `
+  -- How far each finding has progressed: detected, validated, reported or fixed. Kept apart from findings, which a run
+  -- rewrites, and dropped when the fingerprint leaves the state.
+  CREATE TABLE finding_stages (
+    repo TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    stage TEXT NOT NULL CHECK (stage IN ('detected', 'validated', 'reported', 'fixed')),
+    source TEXT NOT NULL,
+    since TEXT NOT NULL,
+    PRIMARY KEY (repo, fingerprint)
+  );
+
+  -- Every stage a finding has had, kept like finding_events after the fingerprint leaves the state.
+  CREATE TABLE finding_stage_events (
+    id INTEGER PRIMARY KEY,
+    repo TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    at TEXT NOT NULL,
+    run_id TEXT,
+    from_stage TEXT,
+    to_stage TEXT NOT NULL,
+    source TEXT NOT NULL,
+    note TEXT,
+    actor TEXT
+  );
+  CREATE INDEX finding_stage_events_by_finding ON finding_stage_events (repo, fingerprint, id);
+
+  INSERT INTO finding_stages (repo, fingerprint, stage, source, since)
+  SELECT f.repo, f.fingerprint,
+    CASE
+      WHEN f.status = 'resolved' THEN 'fixed'
+      WHEN f.status = 'open' AND (json_extract(f.finding, '$.verified') = 1
+        OR EXISTS (SELECT 1 FROM triage t WHERE t.repo = f.repo AND t.fingerprint = f.fingerprint AND t.verdict = 'confirmed')) THEN 'validated'
+      ELSE 'detected'
+    END,
+    'upgrade', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  FROM findings f;
+
+  INSERT INTO finding_stage_events (repo, fingerprint, at, run_id, from_stage, to_stage, source, note, actor)
+  SELECT repo, fingerprint, since, NULL, NULL, stage, source, NULL, NULL FROM finding_stages ORDER BY repo, fingerprint;
+  `,
 ];

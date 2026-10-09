@@ -400,6 +400,25 @@ describe('dashboard server', () => {
     assert.equal(res.status, 403);
   });
 
+  it('serves each finding with its lifecycle stage', async () => {
+    const ov = JSON.parse((await get(port, '/api/overview')).body) as { findings: { fingerprint: string; stage: string; stage_source: string }[] };
+    const byFp = new Map(ov.findings.map((f) => [f.fingerprint, f]));
+    assert.equal(byFp.get('fp1')?.stage, 'detected');
+    assert.equal(byFp.get('fp2')?.stage, 'fixed');
+    assert.equal(byFp.get('fp2')?.stage_source, 'initial');
+  });
+
+  it('serves a finding stage history, and an empty one for an unknown fingerprint', async () => {
+    const res = await get(port, `/api/findings/demo/${'e'.repeat(32)}/stages`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(JSON.parse(res.body), []);
+  });
+
+  it('refuses a cross-site request for a stage history', async () => {
+    const res = await get(port, `/api/findings/demo/${'e'.repeat(32)}/stages`, { headers: { 'sec-fetch-site': 'cross-site' } });
+    assert.equal(res.status, 403);
+  });
+
   it('accepts no method other than GET and POST', async () => {
     assert.equal((await get(port, '/api/overview', { method: 'DELETE' })).status, 405);
     assert.equal((await get(port, '/api/overview', { method: 'POST' })).status, 404);

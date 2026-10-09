@@ -1,4 +1,4 @@
-import type { Analyzer, Category, FindingStatus, Kind, Severity } from './types';
+import type { Analyzer, Category, FindingStatus, Kind, Severity, Stage, StageSource } from './types';
 
 export const SEVERITIES = ['critical', 'high', 'medium', 'low'] as const satisfies readonly Severity[];
 export const CATEGORIES = ['security', 'concurrency', 'error-handling', 'logic', 'performance'] as const satisfies readonly Category[];
@@ -14,6 +14,28 @@ export const KIND_HELP: Record<Kind, string> = {
   vulnerability: 'An attacker, or a user acting beyond their rights, can exploit it. Security weighs it.',
   bug: 'In ordinary use, a user or a system gets a wrong result or an observable failure. Fix it.',
   chore: 'Nothing fails today: debt, hardening or a cost that only matters later. Backlog it.',
+};
+
+// How far a finding has progressed, apart from what was decided about it.
+export const STAGES = ['detected', 'validated', 'reported', 'fixed'] as const satisfies readonly Stage[];
+
+export const STAGE_LABEL: Record<Stage, string> = { detected: 'Detected', validated: 'Validated', reported: 'Reported', fixed: 'Fixed' };
+
+export const STAGE_HELP: Record<Stage, string> = {
+  detected: 'Found by the audit, with nothing yet beyond its evidence in the code.',
+  validated: 'Shown to be real: a test reproduced it, or an auditor confirmed it.',
+  reported: 'Put in front of the people who own the code. Nothing reports findings yet.',
+  fixed: 'No longer observed: the verifier found it gone, its file was deleted, or two re-audits missed it.',
+};
+
+export const STAGE_SOURCE_LABEL: Record<StageSource, string> = {
+  initial: 'when first recorded',
+  reproduced: 'reproduced by a test',
+  auditor: 'confirmed by an auditor',
+  resolved: 'resolved',
+  reopened: 'reopened',
+  withdrawn: 'confirmation withdrawn',
+  upgrade: 'set from the state at upgrade',
 };
 
 export const PERSONAL_DATA_HELP = 'Exposes, logs, sends or mishandles data about an identifiable person.';

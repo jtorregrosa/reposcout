@@ -70,6 +70,10 @@ export function dbExportCommand({ out }: { out?: string }): ExitCode {
   for (const row of store.usage(Number.MAX_SAFE_INTEGER)) appendFileSync(usage, `${JSON.stringify(row)}\n`);
   const events = store.db.prepare('SELECT repo, fingerprint, at, run_id, from_status, to_status, note FROM finding_events ORDER BY id').all();
   writeJson(join(dir, 'finding-history.json'), events);
+  const stages = store.db
+    .prepare('SELECT repo, fingerprint, at, run_id, from_stage, to_stage, source, note, actor FROM finding_stage_events ORDER BY id')
+    .all();
+  writeJson(join(dir, 'finding-stages.json'), stages);
   writeJson(join(dir, 'analyzer-yield.json'), store.yields(Number.MAX_SAFE_INTEGER));
   console.log(`Exported ${store.repoNames().length} repositories and ${events.length} history events to ${dir}`);
   return ExitCode.Ok;

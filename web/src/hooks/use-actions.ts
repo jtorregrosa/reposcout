@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { OVERVIEW_KEY } from './use-overview';
 
-type Action = Exclude<keyof typeof api, 'overview' | 'runEvents' | 'findingHistory'>;
+type Action = Exclude<keyof typeof api, 'overview' | 'runEvents' | 'findingHistory' | 'stageHistory'>;
 type Input<A extends Action> = Parameters<(typeof api)[A]>[0];
 type Output<A extends Action> = Awaited<ReturnType<(typeof api)[A]>>;
 
@@ -29,6 +29,7 @@ export function useAction<A extends Action>(action: A) {
       toast.success(SUCCESS[action]);
       void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY });
       void queryClient.invalidateQueries({ queryKey: ['finding-history'] });
+      void queryClient.invalidateQueries({ queryKey: ['finding-stages'] });
     },
     onError: (e) => toast.error(e.message),
   });

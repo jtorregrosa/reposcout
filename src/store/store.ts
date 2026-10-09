@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Database from 'better-sqlite3';
 import { ANALYZERS, type Analyzer } from '../config/analyzers.js';
+import { nextStage, type Stage, type StageChange, type StageEvent, type StageState, withdrawnStage } from '../findings/stage.js';
 import type { Finding, FindingEntry, FindingStatus, FindingsState, Kind, Repro } from '../findings/types.js';
 import type { AnalyzerYield, Failures, RepoReport, RunResult, YieldRow } from '../report/types.js';
 import type { AuditsByAnalyzer, Census, Decision, FindingEvent, LabelOverride, RepoState, UsageRow } from '../state/types.js';
@@ -256,9 +257,21 @@ export class Store {
         // started before the decision was made.
         const decisions = this.decisionsFor(repo);
         const overrides = this.labelsFor(repo);
+        const stages = this.stagesFor(repo);
         for (const [fingerprint, written] of Object.entries(state.findings ?? {})) {
           const decided = applyDecision(written, decisions.get(fingerprint));
           const e = { ...decided, finding: applyLabels(decided.finding, overrides.get(fingerprint)) };
+          const current = stages.get(fingerprint);
+          const previousStatus = before.get(fingerprint)?.status;
+          const reopening = previousStatus === 'resolved' && current?.stage === 'fixed';
+          const stage = nextStage({
+            current,
+            previousStatus,
+            entry: e,
+            confirmedByAuditor: e.status === 'open' && decisions.get(fingerprint)?.verdict === 'confirmed',
+            lookback: reopening ? { beforeFixed: this.stageBefore(repo, fingerprint, 'fixed') } : {},
+          });
+          if (stage) this.recordStage(repo, fingerprint, current, stage, { at: ctx.at, runId: ctx.runId, actor: null });
           finding.run({
             repo,
             fingerprint,
@@ -289,6 +302,7 @@ export class Store {
         }
         // A fingerprint can leave state when its file is deleted or an older fingerprint is migrated.
         for (const [fingerprint, was] of before) event.run(repo, fingerprint, ctx.at, ctx.runId, was.status, 'removed', null);
+        this.db.prepare('DELETE FROM finding_stages WHERE repo = ? AND fingerprint NOT IN (SELECT fingerprint FROM findings WHERE repo = ?)').run(repo, repo);
       })
       .immediate();
   }
@@ -321,6 +335,9 @@ export class Store {
           .run(repo, fingerprint, d.verdict, d.reason, d.decided_by, d.decided_at);
         const next = applyDecision(entryOf(row), d);
         this.setStatus(repo, fingerprint, next);
+        const current = this.stagesFor(repo).get(fingerprint);
+        const stage = nextStage({ current, previousStatus: 'speculative', entry: next, confirmedByAuditor: d.verdict === 'confirmed' });
+        if (stage) this.recordStage(repo, fingerprint, current, stage, { at: d.decided_at, runId: null, actor: d.decided_by });
         this.event(
           repo,
           fingerprint,
@@ -351,6 +368,11 @@ export class Store {
         const back: FindingEntry = d.verdict === 'refuted' ? { ...rest, status: 'speculative' } : { ...entry, status: 'speculative' };
         this.setStatus(repo, fingerprint, back);
         this.event(repo, fingerprint, at, entry.status, 'speculative', `Decision withdrawn by ${by}`, by);
+        if (d.verdict === 'confirmed') {
+          const current = this.stagesFor(repo).get(fingerprint);
+          const stage = withdrawnStage(current, entry, { beforeAuditor: this.stageBefore(repo, fingerprint, 'auditor') });
+          if (stage) this.recordStage(repo, fingerprint, current, stage, { at, runId: null, actor: by });
+        }
         return back;
       })
       .immediate();
@@ -366,6 +388,48 @@ export class Store {
     this.db
       .prepare('INSERT INTO finding_events (repo, fingerprint, at, run_id, from_status, to_status, note, actor) VALUES (?, ?, ?, NULL, ?, ?, ?, ?)')
       .run(repo, fingerprint, at, from, to, note, actor);
+  }
+
+  stagesFor(repo: string): Map<string, StageState> {
+    const rows = this.db.prepare('SELECT fingerprint, stage, source, since FROM finding_stages WHERE repo = ?').all(repo) as (StageState & {
+      fingerprint: string;
+    })[];
+    return new Map(rows.map(({ fingerprint, ...s }) => [fingerprint, s]));
+  }
+
+  stageHistory(repo: string, fingerprint: string): StageEvent[] {
+    return this.db
+      .prepare('SELECT at, run_id, from_stage, to_stage, source, note, actor FROM finding_stage_events WHERE repo = ? AND fingerprint = ? ORDER BY id')
+      .all(repo, fingerprint) as StageEvent[];
+  }
+
+  // The stage a finding had before its latest move to fixed, or before its latest auditor confirmation.
+  private stageBefore(repo: string, fingerprint: string, move: 'fixed' | 'auditor'): Stage | null {
+    const where = move === 'fixed' ? "to_stage = 'fixed'" : "source = 'auditor'";
+    return (
+      (this.db
+        .prepare(`SELECT from_stage FROM finding_stage_events WHERE repo = ? AND fingerprint = ? AND ${where} ORDER BY id DESC LIMIT 1`)
+        .pluck()
+        .get(repo, fingerprint) as Stage | null | undefined) ?? null
+    );
+  }
+
+  private recordStage(
+    repo: string,
+    fingerprint: string,
+    current: StageState | undefined,
+    change: StageChange,
+    { at, runId, actor }: { at: string; runId: string | null; actor: string | null },
+  ): void {
+    this.db
+      .prepare(
+        `INSERT INTO finding_stages (repo, fingerprint, stage, source, since) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (repo, fingerprint) DO UPDATE SET stage = excluded.stage, source = excluded.source, since = excluded.since`,
+      )
+      .run(repo, fingerprint, change.stage, change.source, at);
+    this.db
+      .prepare('INSERT INTO finding_stage_events (repo, fingerprint, at, run_id, from_stage, to_stage, source, note, actor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(repo, fingerprint, at, runId, current?.stage ?? null, change.stage, change.source, change.note, actor);
   }
 
   allDecisions(): Map<string, Map<string, Decision>> {

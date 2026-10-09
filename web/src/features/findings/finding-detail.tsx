@@ -49,6 +49,7 @@ import { cn } from '@/lib/utils';
 import { DecideDialog, type Verdict } from './decide-dialog';
 import { FindingHistory } from './finding-history';
 import { LabelsEditor } from './labels-editor';
+import { StageTimeline } from './stage-timeline';
 import { SuppressDialog } from './suppress-dialog';
 
 function Section({ title, icon, children, className }: { title: string; icon?: ReactNode; children: ReactNode; className?: string }) {
@@ -256,6 +257,8 @@ export function FindingDetail({ finding: f, position, onPrevious, onNext, onClos
           </div>
           <LabelsEditor finding={f} />
         </header>
+
+        <StageTimeline finding={f} />
 
         {f.decision ? <DecisionNotice finding={f} /> : null}
         {f.status === 'speculative' && f.unconfirmed ? (
