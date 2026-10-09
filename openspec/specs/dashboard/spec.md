@@ -1,7 +1,7 @@
 # dashboard Specification
 
 ## Purpose
-The dashboard is the local web interface started by the `ui` command, where an auditor follows runs, triages findings, starts and cancels audits, and reads coverage and cost. It reads the state database and the run event logs, and its only writes are the suppression list in repos.yaml, auditor decisions and label corrections in the database, detached runs and cancel requests. Request guards and the page's content security policy are part of audit-security; what statuses, decisions and suppressions mean is part of finding-lifecycle.
+The dashboard is the local web interface started by the `ui` command, where an auditor follows runs, triages findings, starts and cancels audits, and reads coverage and cost. It reads the state database and the run event logs, and its only writes are the suppression list in repos.yaml, auditor decisions, label corrections and issue links in the database, detached runs, cancel requests, and Jira issues created for findings. How findings become Jira issues is part of issue-reporting. Request guards and the page's content security policy are part of audit-security; what statuses, decisions and suppressions mean is part of finding-lifecycle.
 ## Requirements
 ### Requirement: Starting the dashboard
 The CLI SHALL provide a `ui` command that serves the dashboard on `http://127.0.0.1:<port>/`, with `--port` defaulting to 4477 (an integer from 0 to 65535), `--config` naming repos.yaml, and opening the default browser unless `--no-open` is given.
@@ -215,7 +215,13 @@ The Triage queue SHALL offer Validate detected findings when its scope holds ope
 - **THEN** both actions are disabled and say a run is in progress
 
 ### Requirement: Bulk actions on findings
-The Findings list SHALL let the auditor select findings by checkbox, by `Space` on the selected row and by shift-click for a range. With a selection, a bar SHALL offer Export selection, Copy for tickets and Not a bug. Not a bug SHALL apply one verdict and reason through the existing decide or suppress action, once per finding, offering a verdict only when every selected finding allows it, and SHALL report which succeeded and which were refused.
+The Findings list SHALL let the auditor select findings by checkbox, by `Space` on the selected row and by shift-click for a range. With a selection, a bar SHALL offer:
+- Export selection;
+- Copy for tickets;
+- Not a bug: applies one verdict and reason through the existing decide or suppress action, once per finding, and offers a verdict only when every selected finding allows it;
+- Report to Jira: offered when every selected finding is validated, open and has no issue, and all belong to one repository with a Jira target. It opens one form for the shared fields and creates one issue per finding.
+
+Both Not a bug and Report to Jira SHALL report which findings succeeded and which were refused.
 
 #### Scenario: Refuting several candidates
 - **WHEN** the auditor selects three speculative candidates and refutes them with one reason
@@ -232,6 +238,14 @@ The Findings list SHALL let the auditor select findings by checkbox, by `Space` 
 #### Scenario: Selection and filters
 - **WHEN** the auditor changes the queue or a filter
 - **THEN** findings no longer listed leave the selection
+
+#### Scenario: Reporting several findings
+- **WHEN** the auditor selects three validated findings of the same repository and reports them with one parent
+- **THEN** three issues are created under that parent, each with its finding's summary and description, and the bar reports 3 reported
+
+#### Scenario: Findings of two repositories
+- **WHEN** the selection holds validated findings of two repositories
+- **THEN** Report to Jira is not offered, and the bar says to select findings of one repository
 
 ### Requirement: Finding detail
 The selected finding SHALL open beside the list and show in its header its severity, category, status, title, file and line, type and personal-data mark, and a compact progress bar of its lifecycle stage, then any unconfirmed point, suppression reason, resolution or auditor decision. Its tabs SHALL show:
@@ -256,15 +270,29 @@ The selected finding SHALL open beside the list and show in its header its sever
 - **THEN** it lists both attempts with their outcomes and reasons, and says validation passes no longer try it
 
 ### Requirement: Next step actions
-The finding detail SHALL lead with the actions that move the finding forward from its queue: Confirm and Not a bug in Triage, Copy for a ticket in To report and Reported, and Unsuppress for a suppressed finding in Closed, each shown only where the existing rules allow it. Open in VS Code SHALL stay visible for every finding, and copying the location or the fingerprint SHALL be offered from a More menu.
+The finding detail SHALL lead with the actions that move the finding forward from its queue, each shown only where the existing rules allow it:
+- Triage: Confirm and Not a bug.
+- To report: Report to Jira when reporting is configured, otherwise Copy for a ticket.
+- Reported: Open in Jira.
+- Closed: Unsuppress for a suppressed finding.
+
+Open in VS Code SHALL stay visible for every finding, and Copy for a ticket, copying the location or the fingerprint, and Unlink issue SHALL be offered from a More menu.
 
 #### Scenario: Speculative candidate
 - **WHEN** the auditor selects an undecided speculative candidate
 - **THEN** the next step offers Confirm and Not a bug
 
 #### Scenario: Validated finding
-- **WHEN** the auditor selects an open finding at `validated`
-- **THEN** the next step offers Copy for a ticket and Not a bug, and does not offer Confirm
+- **WHEN** the auditor selects an open finding at `validated` in a repository with a Jira target
+- **THEN** the next step offers Report to Jira and Not a bug, and does not offer Confirm
+
+#### Scenario: Validated finding without a target
+- **WHEN** the auditor selects an open finding at `validated` in a repository with no Jira target
+- **THEN** the next step offers Copy for a ticket and Not a bug
+
+#### Scenario: Reported finding
+- **WHEN** the auditor selects a finding at `reported` with issue `API-42`
+- **THEN** the next step offers Open in Jira, and the More menu offers Unlink issue
 
 #### Scenario: Resolved finding
 - **WHEN** the auditor selects a resolved finding
@@ -295,6 +323,45 @@ The finding detail SHALL keep its header, decision, suppression, resolution and 
 #### Scenario: Moving through the list on Evidence
 - **WHEN** the Evidence tab is selected and the auditor presses `J`
 - **THEN** the next finding opens on its Evidence tab
+
+### Requirement: Report to Jira
+The finding detail SHALL offer Report to Jira for a validated open finding with no issue. It SHALL open a form prefilled from the repository's target, with the project, issue type, parent, summary, labels, the custom fields with defaults, and every field Jira requires. Each field SHALL get a control matching its type and allowed options. Creating SHALL be disabled until every required field has a value, and Jira's errors SHALL be shown next to their fields.
+
+#### Scenario: Prefilled form
+- **WHEN** the auditor opens Report to Jira on a finding of a repository whose target sets project `API`, a parent and a `Severity` default
+- **THEN** the form shows project `API`, that parent, the finding's title as summary and `Severity` already selected
+
+#### Scenario: Required field left empty
+- **WHEN** Jira requires a `Team` field and the auditor has not chosen one
+- **THEN** Create issue is disabled and `Team` is marked required
+
+#### Scenario: Reporting not configured
+- **WHEN** no `jira` section is configured, or the repository has no target
+- **THEN** Report to Jira is not offered, and the detail says what to configure to enable it
+
+### Requirement: Issue link on findings
+A finding with a linked issue SHALL show the issue key, linking to the issue in Jira, in its detail header, in its row of the Findings list, and in the HTML and Markdown exports. The detail SHALL offer Open in Jira and Unlink issue, and Unlink issue SHALL ask for confirmation and say that the issue in Jira is left as it is.
+
+#### Scenario: Reported finding in the list
+- **WHEN** a finding in the Reported queue has issue `API-42`
+- **THEN** its row shows `API-42`, linking to the issue
+
+#### Scenario: Unlinking
+- **WHEN** the auditor confirms Unlink issue
+- **THEN** the finding returns to the To report queue with no issue
+
+### Requirement: Jira lookups
+The dashboard server SHALL answer the form's lookups from Jira:
+- the create metadata of a project and issue type;
+- the parent search;
+- assignable users by name;
+- the sprints of the project's boards.
+
+Every lookup SHALL require the session token, as actions do. A lookup that fails SHALL answer with Jira's message and status, never with the credential.
+
+#### Scenario: Lookup without the token
+- **WHEN** a lookup request arrives without `X-RepoScout-Token`
+- **THEN** it is refused with status 403 and nothing is sent to Jira
 
 ### Requirement: Keyboard navigation
 The Findings page SHALL move to the next finding with `J` or Down arrow and the previous with `K` or Up arrow, toggle the selected finding in the bulk selection with `Space`, focus the search box with `/`, close the selected finding with `Esc`, open Confirm with `C`, open Not a bug with `X` and open the finding in VS Code with `O`. An action key SHALL do nothing when the action is not offered for the selected finding. Every key SHALL be ignored while typing in a field, while a dialog is open or with a modifier key held.
@@ -393,11 +460,15 @@ The finding detail SHALL let the auditor change a finding's type (bug, vulnerabi
 - **THEN** it is refused with status 400
 
 ### Requirement: Export the current view
-The Findings page SHALL offer Export of exactly the findings the current filters show, as a self-contained printable HTML report, a Markdown report, a SARIF 2.1.0 log, or a copy of their fingerprints, and SHALL disable Export when the view is empty.
+The Findings page SHALL offer Export of exactly the findings the current filters show, as a self-contained printable HTML report, a Markdown report, a SARIF 2.1.0 log, or a copy of their fingerprints, and SHALL disable Export when the view is empty. The HTML and Markdown reports SHALL show each finding's issue key and link when it has one.
 
 #### Scenario: HTML export
 - **WHEN** the auditor exports the printable report with a severity filter applied
 - **THEN** the browser downloads an HTML file holding only the filtered findings
+
+#### Scenario: Reported finding exported
+- **WHEN** the export holds a finding with issue `API-42`
+- **THEN** the Markdown and HTML reports show `API-42` with its link
 
 ### Requirement: Finding text rendered as text
 The dashboard MUST render every text that comes from a finding or a repository as text, never as HTML, because it quotes code from the audited repositories.
@@ -546,12 +617,16 @@ The dashboard MUST append every action, with its request, whether it succeeded, 
 - **THEN** a line with the action, the request, `ok: false` and the error is appended to that day's `dashboard-actions.jsonl`
 
 ### Requirement: Deliberate limits of the dashboard
-The dashboard MUST NOT change `test_command` or any repos.yaml key other than a repository's `suppressed` list, MUST NOT delete state, and MUST NOT write to Azure DevOps or any other remote.
+The dashboard MUST NOT change `test_command` or any repos.yaml key other than a repository's `suppressed` list, and MUST NOT delete state. It MUST NOT write to Azure DevOps, GitHub or any remote other than the configured Jira site. It SHALL write there only to create an issue for a finding on an auditor's action, and MUST NOT edit, transition or delete an existing issue.
 
 #### Scenario: No configuration editing
 - **WHEN** an auditor uses any dashboard action
 - **THEN** repos.yaml changes at most in a repository's `suppressed` list
 - **AND** no state is deleted and nothing is sent to Azure DevOps
+
+#### Scenario: Unlinking leaves Jira alone
+- **WHEN** an auditor unlinks an issue
+- **THEN** no request that changes anything is sent to Jira
 
 ### Requirement: Stage history endpoint
 The dashboard SHALL serve a finding's stage history, oldest first, as a read-only request behind the same guards as every other dashboard request, and SHALL include each finding's current stage, the time it entered it and the source of that change in the findings it serves.

@@ -294,7 +294,16 @@ RepoScout SHALL keep for every finding in a repository's state exactly one lifec
 - **THEN** its status becomes `suppressed` and its stage stays `validated`
 
 ### Requirement: Stages move only on recorded events
-RepoScout MUST change a finding's stage only through the transitions this capability defines: on its first appearance, on reproduction, on an auditor's confirmation, on resolution, on reopening, and on withdrawal of a confirmation. A stage MUST NOT move backwards except on reopening or on withdrawal of a confirmation.
+RepoScout MUST change a finding's stage only through the transitions this capability defines:
+- on its first appearance;
+- on reproduction;
+- on an auditor's confirmation;
+- on linking or unlinking an issue;
+- on resolution;
+- on reopening;
+- on withdrawal of a confirmation.
+
+A stage MUST NOT move backwards except on reopening, on withdrawal of a confirmation, or on unlinking an issue.
 
 #### Scenario: A later run without reproduction keeps the stage
 - **WHEN** a finding was validated by reproduction
@@ -368,12 +377,20 @@ When a resolved finding is reopened, RepoScout SHALL return its stage to the one
 - **WHEN** a resolved finding whose stage history does not show what it was before `fixed` is reopened
 - **THEN** its stage becomes `detected`
 
-### Requirement: Reported stage reserved
-RepoScout SHALL accept `reported` as a stage in its data, its API and its dashboard, but no transition in this capability SHALL move a finding to it. A finding can return to `reported` only by reopening, from a stage history that already held it.
+### Requirement: Reported on a linked issue
+RepoScout SHALL move a finding from `validated` to `reported`, with the source `reported` and the issue key as note, when an issue is linked to it. It SHALL move the finding back to `validated`, with the source `unlinked`, when the issue is unlinked. Runs SHALL keep `reported` like any other stage, and the stage SHALL stay `reported` while the finding is suppressed, refuted or duplicate.
 
-#### Scenario: No finding reaches reported today
-- **WHEN** runs, decisions and withdrawals are applied to findings
-- **THEN** none of them moves a finding to `reported`
+#### Scenario: Issue linked
+- **WHEN** an issue `API-42` is linked to a validated open finding
+- **THEN** its stage becomes `reported` with the source `reported` and the note `API-42`
+
+#### Scenario: Later run
+- **WHEN** a later run reports the reported finding again
+- **THEN** its stage stays `reported`
+
+#### Scenario: Unlinked
+- **WHEN** the issue is unlinked
+- **THEN** the finding's stage is `validated` with the source `unlinked`
 
 ### Requirement: Stage outlives the rewritten state
 RepoScout MUST keep a finding's stage across every run that rewrites the repository's state, and SHALL drop it when the fingerprint leaves the state. The fingerprint's stage history stays.
@@ -388,7 +405,14 @@ RepoScout MUST keep a finding's stage across every run that rewrites the reposit
 - **THEN** it gets an initial stage as a new fingerprint would
 
 ### Requirement: Stage history
-RepoScout SHALL record every stage change of a finding in the same transaction as the change that caused it. Each entry holds the time, the run id (none for a dashboard action), the previous stage (none on first appearance), the new stage, the source (`initial`, `reproduced`, `auditor`, `resolved`, `reopened`, `withdrawn` or `upgrade`), a note, and the actor: null when a run made the change, the auditor's name when made from the dashboard.
+RepoScout SHALL record every stage change of a finding in the same transaction as the change that caused it. Each entry holds:
+- the time;
+- the run id (none for a dashboard action);
+- the previous stage (none on first appearance);
+- the new stage;
+- the source: `initial`, `reproduced`, `auditor`, `reported`, `unlinked`, `resolved`, `reopened`, `withdrawn` or `upgrade`;
+- a note;
+- the actor: null when a run made the change, the auditor's name when made from the dashboard.
 
 #### Scenario: First appearance recorded
 - **WHEN** a run records a new finding
@@ -397,6 +421,10 @@ RepoScout SHALL record every stage change of a finding in the same transaction a
 #### Scenario: Auditor confirmation recorded
 - **WHEN** an auditor confirms a speculative candidate
 - **THEN** its stage history gains an entry from `detected` to `validated` with the source `auditor`, no run id and the auditor as actor
+
+#### Scenario: Report recorded
+- **WHEN** an auditor reports a validated finding as `API-42`
+- **THEN** its stage history gains an entry from `validated` to `reported` with the source `reported`, the note `API-42`, no run id and the auditor as actor
 
 ### Requirement: Auditor decision on an open finding
 The dashboard SHALL let an auditor decide a finding that is currently `open` as `confirmed`, which keeps it `open`, or `refuted`, which makes it `refuted` with the resolution "Refuted by <auditor>: <reason>" and leaves its stage as it was, with a required reason of 3 to 300 characters, recording the verdict, reason, `decided_by`, the time and the decided-on status `open`.
@@ -462,4 +490,3 @@ RepoScout SHALL keep a fingerprint's validation attempts across every run that r
 #### Scenario: Audit after an attempt
 - **WHEN** a full audit rewrites a repository's state after a finding's unsuccessful attempt
 - **THEN** the attempt is still recorded for that fingerprint
-
