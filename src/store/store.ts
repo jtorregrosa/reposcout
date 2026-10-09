@@ -464,12 +464,16 @@ export class Store {
     return this.db.transaction(() => entries.reduce((n, e) => n + update.run(JSON.stringify(e.repro), repo, e.fingerprint).changes, 0))();
   }
 
-  // Labels findings that have no kind yet; a finding an auditor already labelled is left alone.
+  // Labels findings that have no kind yet; a finding an auditor already labelled is left alone, and a personal-data
+  // mark an auditor corrected wins over the backfill's.
   setKinds(repo: string, entries: { fingerprint: string; kind: Kind; personal_data: boolean }[]): number {
     const update = this.db.prepare(
       "UPDATE findings SET finding = json_set(finding, '$.kind', ?, '$.personal_data', json(?)) WHERE repo = ? AND fingerprint = ? AND json_extract(finding, '$.kind') IS NULL",
     );
-    return this.db.transaction(() => entries.reduce((n, e) => n + update.run(e.kind, String(e.personal_data), repo, e.fingerprint).changes, 0))();
+    const overrides = this.labelsFor(repo);
+    return this.db.transaction(() =>
+      entries.reduce((n, e) => n + update.run(e.kind, String(overrides.get(e.fingerprint)?.personal_data ?? e.personal_data), repo, e.fingerprint).changes, 0),
+    )();
   }
 
   labelsFor(repo: string): Map<string, LabelOverride> {

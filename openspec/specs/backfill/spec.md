@@ -74,12 +74,17 @@ The backfill commands SHALL store each batch's results as soon as that batch fin
 - **THEN** the findings already filled are not sent to Claude again
 
 ### Requirement: Never overwrite existing values
-The backfill commands MUST NOT overwrite a type or reproduction steps a finding already has, including a type an auditor set in the dashboard.
+The backfill commands MUST NOT overwrite a type or reproduction steps a finding already has, including a type an auditor set in the dashboard, and `backfill-kind` MUST keep a personal-data mark an auditor corrected when it gives the finding its type.
 
 #### Scenario: Auditor already set the type
 - **WHEN** an auditor set a finding's type to Chore
 - **AND** `backfill-kind` runs
 - **THEN** the finding is not selected and its type stays Chore
+
+#### Scenario: Auditor corrected only the personal-data mark
+- **WHEN** an auditor marked a finding with no type as involving personal data
+- **AND** `backfill-kind` labels it as a bug without personal data
+- **THEN** the finding becomes a bug and stays marked as involving personal data
 
 ### Requirement: Dry run
 With `--dry-run`, the backfill commands SHALL count and log the findings and batches that would be filled, without taking the lock or calling Claude, and exit with code 0.

@@ -96,6 +96,16 @@ describe("an auditor's correction of the labels", () => {
     assert.equal(store.readRepoState('r')?.findings[FP]?.finding.kind, 'chore');
     assert.equal(store.readRepoState('r')?.findings[OTHER]?.finding.personal_data, true);
   });
+
+  it('keeps a corrected personal-data mark when a backfill gives the finding its type', () => {
+    const store = new Store(':memory:');
+    store.writeRepoState('r', state({ [FP]: open() }), { runId: 'run-1', at: 't0' });
+    store.setLabels('r', FP, { personal_data: true }, 'jorge', 't1');
+    store.setKinds('r', [{ fingerprint: FP, kind: 'bug', personal_data: false }]);
+    const labelled = store.readRepoState('r')?.findings[FP]?.finding;
+    assert.equal(labelled?.kind, 'bug');
+    assert.equal(labelled?.personal_data, true);
+  });
 });
 
 describe('the output of a labelling session', () => {
