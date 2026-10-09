@@ -1,0 +1,54 @@
+schema: spec-driven
+
+context: |
+  RepoScout audits Azure DevOps and GitHub repositories for real bugs with Claude Code.
+  A Node CLI does every deterministic step (clone, diff, file selection, fingerprints, history, reports);
+  Claude does the judgement through an orchestrator skill (.claude/skills/audit/SKILL.md) that runs
+  specialist subagents (security, concurrency, error-handling, logic, performance) and a verifier.
+  It runs on a local PC by hand or from Task Scheduler (phase 1); Azure Pipelines (phase 2) is present but disabled.
+
+  Product roadmap. A finding moves through four stages, and RepoScout grows one stage at a time:
+    1. Detect   - specialists propose candidates and the verifier keeps what it can confirm (shipped).
+    2. Validate - settle whether a finding is real and worth acting on (partly shipped: speculative reviews,
+                  reproduction steps, auditor decisions and label overrides).
+    3. Report   - put findings in front of the people who own the code (partly shipped: reports, SARIF,
+                  webhooks, dashboard exports; no work items yet).
+    4. Fix      - propose or apply a fix (not started). Today RepoScout is strictly read-only on audited
+                  repositories, and the PAT has Code (Read) scope only; any write capability is a new
+                  security boundary and must say so in its proposal.
+
+  Vocabulary used across specs:
+    - run: one invocation of `run` over one or more repositories; a sweep chains several full passes.
+    - audit: one repository's Claude session within a run.
+    - analyzer: one of the five specialist categories; the verifier always runs.
+    - candidate: what a specialist proposes; the verifier turns it into a finding, a speculative candidate or a discard.
+    - finding: a verified defect, identified by its fingerprint and tracked across runs with a status and a history.
+    - auditor: the person triaging findings in the dashboard.
+    - owner facts: statements from repos.yaml the code cannot show, trusted over repository text but never over the code.
+
+  Tech stack: TypeScript on Node 22.12+, pnpm workspace; CLI on commander with zod-validated config;
+  SQLite state in state/reposcout.db with versioned migrations; dashboard in web/ with React, Vite,
+  Tailwind CSS, shadcn/ui, React Router and TanStack Query; Vitest unit and end-to-end tests with a fake
+  `claude`; Biome for lint and format; `pnpm verify` runs lint, typecheck, test and build.
+
+  Conventions: everything written in English; dependency versions are exact; code carries no comments
+  unless it explains a why the code cannot; colours live only as theme tokens in web/src/index.css;
+  src/dashboard/api.ts is the HTTP contract the web app type-checks against; README.md is the user guide
+  and must be updated in the same change as the behavior it documents.
+
+rules:
+  proposal:
+    - Name the roadmap stage (detect, validate, report, fix, or platform) the change belongs to.
+    - State whether the change alters the security model (README "Security model", spec audit-security) and how.
+    - State whether the change spends subscription usage, and how it stays within the session and weekly budget.
+  specs:
+    - Describe observable behavior; CLI flags, exit codes, file paths under reports/ and state/, repos.yaml keys and dashboard pages are external contracts and belong in specs, internal module and function names do not.
+    - Keep each requirement statement under 500 characters with SHALL or MUST, and give it at least one WHEN/THEN scenario.
+    - Reuse the existing capability paths under openspec/specs/ before introducing a new one.
+  design:
+    - Say how the change keeps a failed or cancelled run from leaving partial state.
+    - Say what the change needs in the database schema and how older databases migrate.
+  tasks:
+    - Include updating README.md where user-visible behavior changes.
+    - Include the tests that prove the behavior, end-to-end with the fake claude where a run is involved.
+    - End with running pnpm verify.

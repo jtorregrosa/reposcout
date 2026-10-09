@@ -390,6 +390,12 @@ These variables exist for the tests and the evaluation; a normal installation se
 | `REPOSCOUT_CLAUDE_BIN` | Starts this executable instead of `claude` from `PATH`, for a run and for `doctor`, which reports it. A `.js` or `.mjs` path is run with the current Node, so a script works on Windows without a shell or a `.cmd` shim. |
 | `REPOSCOUT_ALLOW_LOCAL_PROVIDER` | `1` allows `provider: local`, which clones from a directory on disk. |
 
+### Specifications
+
+`openspec/specs/` holds one behavior spec per capability, such as `detection`, `finding-lifecycle`, `reports` or `dashboard`, written from what RepoScout does today. They are the contract a change is proposed against, and `openspec/config.yaml` gives every proposal the project context and its rules.
+
+A change that alters behavior starts as a proposal under `openspec/changes/` with `/opsx:propose`, is built with `/opsx:apply`, and is merged into the specs with `/opsx:archive`. `openspec validate --specs --strict` checks the specs, and `openspec list --specs` lists them. The `openspec` CLI is a global install, not a dependency of this repository.
+
 ### Evaluating prompt and model changes
 
 The tests prove the plumbing; they cannot say whether a change to `.claude/skills/audit/SKILL.md`, an agent prompt or a model alias finds more bugs or more noise. `pnpm eval` measures that against a seeded corpus.
@@ -439,8 +445,9 @@ Each result is stamped with a prompt version, the first 12 hex characters of SHA
 | `web/src/features/` | One folder per page: overview, findings, repositories, runs, usage. |
 | `web/src/components/` | Components shared across pages. `components/ui/` holds the shadcn/ui components, added with the shadcn CLI. |
 | `web/src/lib/` | Logic without React: the API client, the live-run reducer, filters, coverage, formatting and the report exports. |
-| `.claude/` | The `/audit` skill and the agent prompts the session loads. |
+| `.claude/` | The `/audit` skill and the agent prompts the session loads, and the OpenSpec skills and `/opsx:*` commands used to develop RepoScout, which audit sessions never use. |
 | `test/e2e/` | The end-to-end suite, its harness and the fake `claude`. |
 | `eval/` | The evaluation: the seeded corpus with its ground truth, the runner, the scorer and the results. |
+| `openspec/` | The behavior specs per capability, the changes proposed against them, and the OpenSpec configuration. See [Specifications](#specifications). |
 
 Colours live only in `web/src/index.css`, as theme tokens for light and dark, including one per severity and status. Components use them through Tailwind classes such as `text-severity-high`, never as literal values.
