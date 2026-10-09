@@ -2,9 +2,7 @@
 
 ## Purpose
 The `run` command orchestrates audits over the repositories in `repos.yaml`: it chooses the mode, takes the run lock, audits each repository in turn with one Claude session, isolates failures, honours cancellation and the subscription limit, chains sweep passes, and decides the exit code. Checkout is covered by repository-checkout, file choice by file-selection, finding classification by finding-lifecycle, and the database by state-store.
-
 ## Requirements
-
 ### Requirement: Run command and repository filter
 The CLI SHALL provide `run`, which audits every repository in the config file (`--config`, default `repos.yaml`) in order, or only those named by `--repo <name>` (repeatable), and SHALL fail with exit code 1 and an error naming the filter when no configured repository matches.
 
@@ -18,7 +16,7 @@ The CLI SHALL provide `run`, which audits every repository in the config file (`
 - **AND** exits with code 1 without auditing anything
 
 ### Requirement: Audit modes
-The CLI SHALL accept `--mode` with exactly `incremental`, `full` or `speculative`, rejecting any other value as a usage error; without `--mode` each repository uses its configured `mode`, or `incremental` when none is set.
+The CLI SHALL accept `--mode` with exactly `incremental`, `full`, `speculative` or `validate`, rejecting any other value as a usage error; without `--mode` each repository uses its configured `mode`, or `incremental` when none is set.
 
 #### Scenario: Default mode
 - **WHEN** the user runs `run` with no `--mode` and the repository sets no `mode`
@@ -26,7 +24,7 @@ The CLI SHALL accept `--mode` with exactly `incremental`, `full` or `speculative
 
 #### Scenario: Invalid mode
 - **WHEN** the user runs `run --mode quick`
-- **THEN** the CLI refuses the flag with a message listing incremental, full and speculative
+- **THEN** the CLI refuses the flag with a message listing incremental, full, speculative and validate
 
 ### Requirement: Speculative mode reviews only speculative candidates
 In `speculative` mode RepoScout SHALL run a speculative review session for each repository that holds speculative candidates, choosing them as defined in the detection capability, and SHALL skip a repository with none; it MUST NOT change the last audited commit, the per-file audit times or the open findings.
@@ -121,11 +119,15 @@ RepoScout SHALL treat a `state/.cancel` file holding the current run id as a can
 - **THEN** the current run is not cancelled
 
 ### Requirement: Exit code precedence
-The CLI SHALL exit with 4 when the run was cancelled, otherwise 3 when the usage limit was hit, otherwise 1 when any repository failed, otherwise 5 when a sweep stopped at its budget, otherwise 0 when every repository was audited, skipped or prepared.
+The CLI SHALL exit with 4 when the run was cancelled, otherwise 3 when the usage limit was hit, otherwise 1 when any repository failed, otherwise 5 when a sweep or a validation pass stopped at its budget, otherwise 0 when every repository was audited, validated, skipped or prepared.
 
 #### Scenario: Failure and budget stop together
 - **WHEN** one repository fails and a sweep on another stops at the session budget
 - **THEN** the run exits with code 1
+
+#### Scenario: Validation pass stopped at its budget
+- **WHEN** a validation pass validates one repository and stops before the next at the session budget
+- **THEN** the run exits with code 5
 
 ### Requirement: Sweeps until covered
 With `--until-covered` RepoScout SHALL chain full passes over each repository, each pass picking only eligible files the selected analyzers have not audited since the sweep began, and SHALL stop at the first of: no such file left, a budget stop, a cancel, a pass that fails or is skipped, or `--max-passes` passes (default 30, 1 to 100).
@@ -135,15 +137,23 @@ With `--until-covered` RepoScout SHALL chain full passes over each repository, e
 - **THEN** the sweep stops as complete without starting a Claude session for that pass
 
 ### Requirement: Sweep flag validation
-The CLI SHALL refuse `--until-covered` combined with a `--mode` other than `full`, SHALL refuse `--session-limit`, `--weekly-limit`, `--max-passes` and `--sweep-since` without `--until-covered`, and SHALL accept the limits only as whole percentages from 10 to 99.
+The CLI SHALL refuse `--until-covered` combined with a `--mode` other than `full`, SHALL refuse `--max-passes` and `--sweep-since` without `--until-covered`, SHALL refuse `--session-limit` and `--weekly-limit` unless given with `--until-covered` or `--mode validate`, SHALL refuse `--analyzers` with `--mode validate`, and SHALL accept the limits only as whole percentages from 10 to 99.
 
 #### Scenario: Sweep flag without a sweep
-- **WHEN** the user runs `run --session-limit 80` without `--until-covered`
-- **THEN** the CLI exits with code 1 explaining these flags only apply with `--until-covered`
+- **WHEN** the user runs `run --session-limit 80` without `--until-covered` or `--mode validate`
+- **THEN** the CLI exits with code 1 explaining these flags only apply with `--until-covered` or `--mode validate`
 
 #### Scenario: Incompatible mode
 - **WHEN** the user runs `run --until-covered --mode incremental`
 - **THEN** the CLI exits with code 1 explaining that sweeps run in full mode
+
+#### Scenario: Limits with a validation pass
+- **WHEN** the user runs `run --mode validate --session-limit 70`
+- **THEN** the CLI accepts the flag and the validation pass uses 70% as its session limit
+
+#### Scenario: Analyzers with a validation pass
+- **WHEN** the user runs `run --mode validate --analyzers security`
+- **THEN** the CLI exits with code 1 explaining that a validation pass takes no analyzers
 
 ### Requirement: Sweep budget stop
 Before each sweep pass RepoScout SHALL take the latest subscription reading whose window has not reset, add the measured cost of the previous pass (or 8% of the 5-hour window and 2% of the weekly one before any pass is measured), and stop before the pass when the result would exceed `--session-limit` (default 90) or `--weekly-limit` (default 95) or the reported status is not allowed; with no reading it SHALL proceed.
@@ -217,3 +227,41 @@ In incremental mode RepoScout SHALL skip a repository without starting Claude wh
 #### Scenario: No new commits
 - **WHEN** an incremental run finds the branch head equal to every selected analyzer's last audited commit
 - **THEN** the repository is skipped with the reason "no changes" and no Claude session starts
+
+### Requirement: Validate mode reproduces detected findings
+In `validate` mode RepoScout SHALL run, for each repository with verification on and at least one finding to try, one validation session that tries to reproduce open findings at the `detected` stage, choosing them as the detection capability defines, and SHALL skip a repository with none with the reason `no findings to validate`.
+
+#### Scenario: Nothing to validate
+- **WHEN** `run --mode validate` runs on a repository with verification on and no open finding at `detected`
+- **THEN** the repository is skipped with the reason `no findings to validate` and no Claude session starts
+
+### Requirement: Validate mode leaves coverage and resolution alone
+A validation pass MUST NOT change the last audited commit overall or per analyzer, the file audit times, the last run time, any finding's status or `last_seen`, or any miss count; it SHALL change only the findings it reproduced and the record of validation attempts.
+
+#### Scenario: Coverage untouched
+- **WHEN** a validation pass completes on a repository last audited at commit `A` while its branch is at `B`
+- **THEN** every analyzer still records `A` as its last audited commit and the file audit times are unchanged
+
+#### Scenario: Unreproduced finding stays open
+- **WHEN** a validation pass cannot reproduce an open finding
+- **THEN** the finding is still `open`, its `missed_runs` is unchanged and no resolution is recorded
+
+### Requirement: Validate mode needs verification
+In `validate` mode RepoScout SHALL skip, before fetching it, every repository whose verification is off, with a reason starting `verification off:` that says why: no `test_command`, or no sandbox on this platform without `test_command_unsandboxed: true`. No Claude session starts and no usage row is recorded for it.
+
+#### Scenario: Native Windows without opt-in
+- **WHEN** `run --mode validate` runs on native Windows for a repository with `test_command` and no `test_command_unsandboxed`
+- **THEN** the repository is skipped with a reason saying there is no sandbox on this platform
+- **AND** the run exits with code 0 when nothing else failed
+
+#### Scenario: Native Windows with opt-in
+- **WHEN** the repository sets `test_command_unsandboxed: true`
+- **THEN** the validation session runs the test command unsandboxed and the log warns that it does
+
+### Requirement: Validation budget stop
+Before each repository's validation session RepoScout SHALL apply the budget estimate defined in usage-metrics with `--session-limit` (default 90) and `--weekly-limit` (default 95), using the measured cost of the previous validation session of this run; when the estimate refuses, it SHALL defer that repository and every later one with the budget reason and start no session.
+
+#### Scenario: Session would cross the limit
+- **WHEN** the 5-hour window reads 85% before the first validation session of the run
+- **THEN** no session starts, every remaining repository is deferred with the budget reason, and the run exits with code 5
+
