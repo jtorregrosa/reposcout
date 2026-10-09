@@ -3,7 +3,7 @@ import type { Logger } from '../telemetry/logger.js';
 import { importLegacyOnce } from './legacy.js';
 import { Store } from './store.js';
 
-export type { DatedReport, PrecisionFact, WriteContext } from './store.js';
+export type { DatedReport, PrecisionFact, Snapshot, WriteContext } from './store.js';
 export { DecisionError, Store } from './store.js';
 
 const open = new Map<string, Store>();
