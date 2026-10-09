@@ -79,11 +79,15 @@ The `doctor` command SHALL load the configuration file given by `--config` (defa
 - **AND** no PAT, token or verification checks are made for repositories
 
 ### Requirement: Token checks
-The `doctor` command SHALL check, once per distinct `pat_env` among Azure DevOps repositories, that the variable is set, without checking GitHub tokens, and SHALL check that `CLAUDE_CODE_OAUTH_TOKEN` is set when any repository uses `claude.auth: isolated`; it MUST NOT print any token value.
+The `doctor` command SHALL check, once per distinct `pat_env` among Azure DevOps repositories, that the variable is set, unless `REPOSCOUT_ADO_BEARER` is set, which a run uses instead of any PAT and which `doctor` then reports as one passing check. It SHALL NOT check GitHub tokens, SHALL check that `CLAUDE_CODE_OAUTH_TOKEN` is set when any repository uses `claude.auth: isolated`, and MUST NOT print any token value.
 
 #### Scenario: Missing Azure DevOps PAT
 - **WHEN** an Azure DevOps repository uses `REPOSCOUT_ADO_PAT` and it is unset
 - **THEN** the `PAT in REPOSCOUT_ADO_PAT` check fails saying the variable is not set
+
+#### Scenario: Bearer instead of a PAT
+- **WHEN** an Azure DevOps repository uses `REPOSCOUT_ADO_PAT`, which is unset, and `REPOSCOUT_ADO_BEARER` is set
+- **THEN** no PAT check runs and the `Azure DevOps bearer in REPOSCOUT_ADO_BEARER` check passes without printing the token
 
 #### Scenario: Missing OAuth token
 - **WHEN** a repository uses `claude.auth: isolated` and `CLAUDE_CODE_OAUTH_TOKEN` is unset
