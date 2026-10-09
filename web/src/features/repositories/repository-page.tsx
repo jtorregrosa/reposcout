@@ -86,12 +86,14 @@ export function RepositoryPage() {
         </Alert>
       ) : null}
 
-      {repo.test_command ? null : (
+      {repo.verification === 'on' ? null : (
         <Alert>
           <FlaskConicalOff />
           <AlertTitle>Verification is off</AlertTitle>
           <AlertDescription>
-            No test_command is set in repos.yaml, so the verifier confirms findings from the code alone and never reproduces one with a test.
+            {repo.verification === 'no-sandbox'
+              ? 'Claude Code has no sandbox on this platform, so test_command is ignored and the verifier confirms findings from the code alone. Set test_command_unsandboxed: true to run it with your rights and network anyway.'
+              : 'No test_command is set in repos.yaml, so the verifier confirms findings from the code alone and never reproduces one with a test.'}
           </AlertDescription>
         </Alert>
       )}
@@ -141,7 +143,7 @@ export function RepositoryPage() {
               <dt className="text-muted-foreground">Verifier model</dt>
               <dd>{repo.models.verifier}</dd>
               <dt className="text-muted-foreground">Reproduction tests</dt>
-              <dd>{repo.test_command ? 'enabled' : 'off'}</dd>
+              <dd>{repo.verification === 'on' ? 'enabled' : 'off'}</dd>
               <dt className="text-muted-foreground">Last audit</dt>
               <dd>
                 <RelativeTime iso={repo.last_run_at} />

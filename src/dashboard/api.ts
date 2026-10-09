@@ -84,6 +84,8 @@ export interface RepoView {
   branch: string;
   models: { orchestrator: string; specialists: string; verifier: string };
   test_command: boolean;
+  // Whether the verifier may reproduce findings with test_command here, and if not, why.
+  verification: 'on' | 'no-test-command' | 'no-sandbox';
   last_commit: string | null;
   last_run_at: string | null;
   last_full_run_at: string | null;

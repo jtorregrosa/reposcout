@@ -6,7 +6,7 @@ import { describe, it } from 'vitest';
 import { claudeEnv } from '../src/claude/session.js';
 import { buildSettings, type ClaudeSettings, toPosix } from '../src/claude/settings.js';
 import { parseConfig } from '../src/config/config.js';
-import { sandboxSupported, verificationFor } from '../src/security/sandbox.js';
+import { sandboxSupported, verificationFor, verificationState } from '../src/security/sandbox.js';
 
 // Claude Code's documented Bash rule semantics: the rule is matched against the whole command text as written,
 // `*` stands for any text (spaces included), a trailing ` *` that is the only wildcard also matches the bare
@@ -211,6 +211,14 @@ describe('test_command', () => {
     assert.equal(optedIn.sandboxed, false);
     assert.match(optedIn.warning, /without a sandbox/);
     assert.deepEqual(verificationFor({ ...repo, test_command: null }, 'win32'), { testCommand: null, sandboxed: false, warning: null });
+  });
+
+  it('tells the dashboard verification is off on native Windows unless the repository opts in', () => {
+    const repo = { name: 'a', test_command: 'pnpm test', test_command_unsandboxed: false };
+    assert.equal(verificationState(repo, 'linux'), 'on');
+    assert.equal(verificationState(repo, 'win32'), 'no-sandbox');
+    assert.equal(verificationState({ ...repo, test_command_unsandboxed: true }, 'win32'), 'on');
+    assert.equal(verificationState({ ...repo, test_command: null }, 'linux'), 'no-test-command');
   });
 
   it('validates the opt-in in repos.yaml', () => {

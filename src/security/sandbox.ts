@@ -34,3 +34,12 @@ export function verificationFor(
     warning: `verification disabled: Claude Code has no sandbox on ${platform}, so test_command is ignored. Set test_command_unsandboxed: true to run it with your rights and network anyway.`,
   };
 }
+
+// What the dashboard says about verification for a repository on this platform.
+export function verificationState(
+  repo: Pick<RepoConfig, 'name' | 'test_command' | 'test_command_unsandboxed'>,
+  platform: NodeJS.Platform = process.platform,
+): 'on' | 'no-test-command' | 'no-sandbox' {
+  if (!repo.test_command) return 'no-test-command';
+  return verificationFor(repo, platform).testCommand ? 'on' : 'no-sandbox';
+}

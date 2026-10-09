@@ -49,8 +49,14 @@ export function doctorCommand({ config }: { config: string }): ExitCode {
     repos = loadConfig(resolve(ROOT, config));
     return `${repos.length} repositories`;
   });
-  // GitHub tokens are optional (public repositories), so only Azure DevOps PATs are required here.
-  for (const name of new Set(repos.filter((r) => r.provider === 'azure-devops').map((r) => r.pat_env))) {
+  // GitHub tokens are optional (public repositories), so only Azure DevOps PATs are required here. A run prefers
+  // REPOSCOUT_ADO_BEARER over any PAT, so with it set no PAT is needed.
+  const adoPats = new Set(repos.filter((r) => r.provider === 'azure-devops').map((r) => r.pat_env));
+  if (adoPats.size && process.env.REPOSCOUT_ADO_BEARER) {
+    check('Azure DevOps bearer in REPOSCOUT_ADO_BEARER', () => 'set; used instead of a PAT');
+    adoPats.clear();
+  }
+  for (const name of adoPats) {
     check(`PAT in ${name}`, () => {
       readPat(name);
       return 'set';
