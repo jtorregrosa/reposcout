@@ -5,7 +5,7 @@ import { ANALYZERS, type Analyzer } from '../config/analyzers.js';
 import { nextStage, type Stage, type StageChange, type StageEvent, type StageState, withdrawnStage } from '../findings/stage.js';
 import type { Finding, FindingEntry, FindingStatus, FindingsState, Kind, Repro } from '../findings/types.js';
 import type { AnalyzerYield, Failures, RepoReport, RunResult, YieldRow } from '../report/types.js';
-import type { AuditsByAnalyzer, Census, Decision, FindingEvent, LabelOverride, RepoState, UsageRow, ValidationAttempt } from '../state/types.js';
+import type { AuditsByAnalyzer, Census, Decision, FindingEvent, IssueLink, LabelOverride, RepoState, UsageRow, ValidationAttempt } from '../state/types.js';
 import { MIGRATIONS } from './schema.js';
 
 // What precision needs to know of one finding: how it ended and which run first proposed it, with that run's
@@ -77,6 +77,16 @@ function entryOf(row: FindingRow): FindingEntry {
   };
 }
 
+export class IssueError extends Error {
+  override name = 'IssueError';
+  constructor(
+    readonly kind: 'not-found' | 'not-reportable' | 'already-reported' | 'no-issue',
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 export class DecisionError extends Error {
   override name = 'DecisionError';
   constructor(
@@ -117,6 +127,7 @@ export interface Snapshot {
   decisions: Keyed<Decision>[];
   labels: Keyed<LabelOverride>[];
   attempts: Keyed<ValidationAttempt>[];
+  issues: Keyed<IssueLink>[];
   yields: YieldRow[];
   reports: { date: string; report: RepoReport }[];
   failures: { date: string; repo: string; error: string; deferred: boolean; at: string }[];
@@ -323,6 +334,7 @@ export class Store {
         // A fingerprint can leave state when its file is deleted or an older fingerprint is migrated.
         for (const [fingerprint, was] of before) event.run(repo, fingerprint, ctx.at, ctx.runId, was.status, 'removed', null);
         this.db.prepare('DELETE FROM finding_stages WHERE repo = ? AND fingerprint NOT IN (SELECT fingerprint FROM findings WHERE repo = ?)').run(repo, repo);
+        this.db.prepare('DELETE FROM finding_issues WHERE repo = ? AND fingerprint NOT IN (SELECT fingerprint FROM findings WHERE repo = ?)').run(repo, repo);
       })
       .immediate();
   }
@@ -461,6 +473,9 @@ export class Store {
         attempts: this.db
           .prepare('SELECT repo, fingerprint, at, run_id, outcome, reason FROM validation_attempts ORDER BY repo, fingerprint, at')
           .all() as Snapshot['attempts'],
+        issues: this.db
+          .prepare('SELECT repo, fingerprint, key, url, project, reported_by, reported_at FROM finding_issues ORDER BY repo, fingerprint')
+          .all() as Snapshot['issues'],
         yields: this.yields(Number.MAX_SAFE_INTEGER),
         reports: (this.db.prepare('SELECT date, data FROM reports ORDER BY date, generated_at, run_id').all() as { date: string; data: string }[]).map((r) => ({
           date: r.date,
@@ -514,6 +529,69 @@ export class Store {
     this.db
       .prepare('INSERT INTO labels (repo, fingerprint, kind, personal_data, set_by, set_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(repo, fingerprint, o.kind, o.personal_data == null ? null : Number(o.personal_data), o.set_by, o.set_at);
+  }
+
+  issuesFor(repo: string): Map<string, IssueLink> {
+    const rows = this.db
+      .prepare('SELECT fingerprint, key, url, project, reported_by, reported_at FROM finding_issues WHERE repo = ?')
+      .all(repo) as (IssueLink & { fingerprint: string })[];
+    return new Map(rows.map(({ fingerprint, ...link }) => [fingerprint, link]));
+  }
+
+  // Why a finding cannot be reported now, or null when it can: only a validated open finding with no issue can.
+  notReportable(repo: string, fingerprint: string): IssueError | null {
+    const row = this.db.prepare('SELECT status FROM findings WHERE repo = ? AND fingerprint = ?').get(repo, fingerprint) as { status: string } | undefined;
+    if (!row) return new IssueError('not-found', 'no such finding in this repository');
+    const link = this.issuesFor(repo).get(fingerprint);
+    if (link) return new IssueError('already-reported', `this finding is already reported as ${link.key}`);
+    const stage = this.stagesFor(repo).get(fingerprint)?.stage ?? 'detected';
+    if (row.status !== 'open' || stage !== 'validated') {
+      return new IssueError('not-reportable', `only a validated open finding can be reported; this one is ${row.status} at ${stage}`);
+    }
+    return null;
+  }
+
+  // Records the issue a finding was reported as and moves it to reported, in one transaction.
+  linkIssue(repo: string, fingerprint: string, link: IssueLink): void {
+    this.db
+      .transaction(() => {
+        const refused = this.notReportable(repo, fingerprint);
+        if (refused) throw refused;
+        this.db
+          .prepare('INSERT INTO finding_issues (repo, fingerprint, key, url, project, reported_by, reported_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(repo, fingerprint, link.key, link.url, link.project, link.reported_by, link.reported_at);
+        const current = this.stagesFor(repo).get(fingerprint);
+        this.recordStage(
+          repo,
+          fingerprint,
+          current,
+          { stage: 'reported', source: 'reported', note: link.key },
+          { at: link.reported_at, runId: null, actor: link.reported_by },
+        );
+      })
+      .immediate();
+  }
+
+  // Forgets a finding's issue, which stays in Jira as it is, and returns the finding from reported to validated.
+  unlinkIssue(repo: string, fingerprint: string, by: string, at: string): IssueLink {
+    return this.db
+      .transaction(() => {
+        const link = this.issuesFor(repo).get(fingerprint);
+        if (!link) throw new IssueError('no-issue', 'this finding has no linked issue');
+        this.db.prepare('DELETE FROM finding_issues WHERE repo = ? AND fingerprint = ?').run(repo, fingerprint);
+        const current = this.stagesFor(repo).get(fingerprint);
+        if (current?.stage === 'reported') {
+          this.recordStage(repo, fingerprint, current, { stage: 'validated', source: 'unlinked', note: link.key }, { at, runId: null, actor: by });
+        }
+        return link;
+      })
+      .immediate();
+  }
+
+  restoreIssue(repo: string, fingerprint: string, link: IssueLink): void {
+    this.db
+      .prepare('INSERT INTO finding_issues (repo, fingerprint, key, url, project, reported_by, reported_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(repo, fingerprint, link.key, link.url, link.project, link.reported_by, link.reported_at);
   }
 
   // The stage a finding had before its latest move to fixed, or before its latest auditor confirmation.

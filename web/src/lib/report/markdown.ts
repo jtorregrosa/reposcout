@@ -57,6 +57,7 @@ export function findingMarkdown(x: FindingView): string {
     `| Location | \`${cell(x.repo)}\` · \`${cell(x.file)}:${x.line}\` |`,
     `| Confidence | ${x.confidence}${x.verified ? ', reproduced by a test' : ''} |`,
     `| Fingerprint | \`${x.fingerprint}\` |`,
+    ...(x.issue ? [`| Jira issue | [${x.issue.key}](${x.issue.url}) |`] : []),
     '',
     ...section('What happens', x.scenario),
     ...reproSection(x.repro),
@@ -97,7 +98,7 @@ function detail(f: NumberedFinding): string[] {
   if (f.reproduction) out.push('**Reproduction**', '', ...fence(f.reproduction), '');
   out.push(...section('Not confirmed', f.unconfirmed), ...section('Suppressed because', f.suppressed_reason), ...section('Resolution', f.resolution));
   out.push(
-    `<sub>Fingerprint \`${f.fingerprint}\`${f.commit ? ` · commit \`${String(f.commit).slice(0, 10)}\`` : ''} · [${categoryLabel(f.category)}](#${typeAnchor(f.category)}) · [index](#index)</sub>`,
+    `<sub>Fingerprint \`${f.fingerprint}\`${f.commit ? ` · commit \`${String(f.commit).slice(0, 10)}\`` : ''}${f.issue ? ` · Jira [${f.issue.key}](${f.issue.url})` : ''} · [${categoryLabel(f.category)}](#${typeAnchor(f.category)}) · [index](#index)</sub>`,
     '',
     '---',
     '',

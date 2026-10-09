@@ -3,9 +3,12 @@ import type { AddressInfo } from 'node:net';
 import { resolve } from 'node:path';
 import { startServer } from '../dashboard/server.js';
 import { ROOT, UI_DIR } from '../paths.js';
+import { loadEnvFile } from '../security/env.js';
 
 export async function uiCommand({ port, open, config }: { port: number; open: boolean; config: string }): Promise<void> {
   let server: Awaited<ReturnType<typeof startServer>>;
+  // The dashboard reads the Jira credential from .env; it never starts Claude, so the API-key guard does not apply.
+  loadEnvFile(ROOT);
   try {
     server = await startServer({
       root: ROOT,
@@ -21,7 +24,7 @@ export async function uiCommand({ port, open, config }: { port: number; open: bo
     throw e;
   }
   const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
-  console.log(`RepoScout dashboard: ${url}  (local only, read-only; Ctrl+C to stop)`);
+  console.log(`RepoScout dashboard: ${url}  (local only; Ctrl+C to stop)`);
   if (open) {
     const [cmd, args]: [string, string[]] =
       process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];

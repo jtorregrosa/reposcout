@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { ActionError, errorMessage } from '../errors.js';
 import { localDate, parseJsonLines } from '../fs.js';
+import { JiraError } from '../jira/client.js';
 import { layout } from '../paths.js';
 import { redactDeep } from '../security/secrets.js';
 import { activeRun } from '../state/lock.js';
@@ -22,6 +23,7 @@ import {
   undoDecision,
   unsuppressFinding,
 } from './actions.js';
+import { type JiraDeps, jiraLookup, jiraStatus, type LookupKind, reportAction, unlinkAction } from './jira-actions.js';
 import { listRuns, overviewSignature, readOverview, runEventsFile } from './overview.js';
 import { resolveAsset } from './static.js';
 
@@ -176,6 +178,18 @@ const BODIES = {
   undecide: z.strictObject({ repo: z.string(), fingerprint: z.string() }),
   label: z.strictObject({ repo: z.string(), fingerprint: z.string(), kind: z.unknown().optional(), personal_data: z.unknown().optional() }),
   open: z.strictObject({ repo: z.string(), file: z.unknown(), line: z.unknown().optional() }),
+  report: z.strictObject({
+    repo: z.string(),
+    fingerprints: z.array(z.string()),
+    project: z.string(),
+    issue_type: z.string().min(1),
+    parent: z.string().nullable().default(null),
+    labels: z.array(z.string()).default([]),
+    fields: z.record(z.string(), z.union([z.string(), z.number(), z.array(z.string()), z.null()])).default({}),
+    // Only the summaries the auditor edited; the rest come from the findings' titles.
+    summaries: z.record(z.string(), z.string().max(255)).default({}),
+  }),
+  unlink: z.strictObject({ repo: z.string(), fingerprint: z.string() }),
 };
 
 type ActionName = keyof typeof BODIES;
@@ -188,7 +202,7 @@ export interface ServerOptions {
   port: number;
   host?: string;
   pollMs?: number;
-  deps?: ActionDeps;
+  deps?: ActionDeps & JiraDeps;
 }
 
 function parseBody(name: ActionName, text: string): unknown {
@@ -211,6 +225,7 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
   // but cannot read /api/session to learn the token, and a custom header forces a CORS preflight we never grant.
   const token = randomBytes(32).toString('hex');
   const store = openStore(layout(root));
+  let reporting: Promise<unknown> = Promise.resolve();
   const actions: { [K in ActionName]: (b: Body<K>) => unknown } = {
     run: (b) =>
       startRun(
@@ -234,6 +249,13 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
     undecide: (b) => undoDecision({ root, configPath, repo: b.repo, fingerprint: b.fingerprint }),
     label: (b) => setLabels({ root, configPath, repo: b.repo, fingerprint: b.fingerprint, kind: b.kind, personal_data: b.personal_data }),
     open: (b) => openInEditor({ root, configPath, repo: b.repo, file: b.file, line: b.line }, deps),
+    // One report at a time, so two clicks cannot both pass the check that a finding has no issue yet.
+    report: (b) => {
+      const next = reporting.then(() => reportAction({ root, configPath, body: b }, deps));
+      reporting = next.catch(() => undefined);
+      return next;
+    },
+    unlink: (b) => unlinkAction({ root, repo: b.repo, fingerprint: b.fingerprint }),
   };
   const isAction = (name: string): name is ActionName => Object.hasOwn(actions, name);
 
@@ -250,6 +272,10 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
     if (site && site !== 'same-origin' && site !== 'none') return reply(403, { error: 'cross-site request' });
 
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
+    const replyError = (e: unknown) => {
+      if (e instanceof JiraError) return reply(jiraStatus(e), { error: e.message, fields: e.fields });
+      return reply(e instanceof ActionError ? e.status : 500, { error: errorMessage(e) });
+    };
 
     if (req.method === 'POST') {
       const name = url.pathname.startsWith('/api/actions/') ? url.pathname.slice('/api/actions/'.length) : '';
@@ -265,15 +291,26 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
         return reply(e instanceof ActionError ? e.status : 400, { error: e instanceof ActionError ? e.message : 'invalid JSON' });
       }
       try {
-        const result = (actions[name] as (b: unknown) => unknown)(body);
+        const result = await (actions[name] as (b: unknown) => unknown)(body);
         logAction(root, { action: name, request: body, ok: true, result });
         return reply(200, result);
       } catch (e) {
         logAction(root, { action: name, request: body, ok: false, error: errorMessage(e) });
-        return reply(e instanceof ActionError ? e.status : 500, { error: errorMessage(e) });
+        return replyError(e);
       }
     }
     if (req.method !== 'GET') return reply(405, { error: 'method not allowed' });
+
+    // Lookups spend the Jira credential, so they need the session token like actions do.
+    const lookup = /^\/api\/jira\/(meta|parents|users|sprints)$/.exec(url.pathname);
+    if (lookup) {
+      if (!sameToken(req.headers['x-reposcout-token'], token)) return reply(403, { error: 'missing or invalid session token' });
+      try {
+        return reply(200, await jiraLookup(lookup[1] as LookupKind, url.searchParams, { root, configPath }, deps));
+      } catch (e) {
+        return replyError(e);
+      }
+    }
 
     try {
       if (url.pathname === '/api/session') return reply(200, { token });

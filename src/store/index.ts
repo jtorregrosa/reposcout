@@ -4,7 +4,7 @@ import { importLegacyOnce } from './legacy.js';
 import { Store } from './store.js';
 
 export type { DatedReport, PrecisionFact, Snapshot, WriteContext } from './store.js';
-export { DecisionError, Store } from './store.js';
+export { DecisionError, IssueError, Store } from './store.js';
 
 const open = new Map<string, Store>();
 

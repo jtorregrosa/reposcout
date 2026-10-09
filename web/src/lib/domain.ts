@@ -24,7 +24,7 @@ export const STAGE_LABEL: Record<Stage, string> = { detected: 'Detected', valida
 export const STAGE_HELP: Record<Stage, string> = {
   detected: 'Found by the audit, with nothing yet beyond its evidence in the code.',
   validated: 'Shown to be real: a test reproduced it, or an auditor confirmed it.',
-  reported: 'Put in front of the people who own the code. Nothing reports findings yet.',
+  reported: 'Put in front of the people who own the code: a Jira issue was filed for it.',
   fixed: 'No longer observed: the verifier found it gone, its file was deleted, or two re-audits missed it.',
 };
 
@@ -32,6 +32,8 @@ export const STAGE_SOURCE_LABEL: Record<StageSource, string> = {
   initial: 'when first recorded',
   reproduced: 'reproduced by a test',
   auditor: 'confirmed by an auditor',
+  reported: 'reported to Jira',
+  unlinked: 'when its Jira issue was unlinked',
   resolved: 'resolved',
   reopened: 'reopened',
   withdrawn: 'confirmation withdrawn',

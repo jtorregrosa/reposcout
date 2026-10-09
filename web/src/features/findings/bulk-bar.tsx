@@ -1,12 +1,15 @@
-import { CircleX, ClipboardCopy, X } from 'lucide-react';
+import { CircleX, ClipboardCopy, Send, X } from 'lucide-react';
 import { useState } from 'react';
 import { copyText } from '@/components/copy-button';
 import { Button } from '@/components/ui/button';
+import { useJiraReadiness } from '@/hooks/use-jira';
+import { commonActions } from '@/lib/actions';
 import { plural } from '@/lib/format';
 import { findingMarkdown } from '@/lib/report/markdown';
 import type { FindingView, RepoView } from '@/lib/types';
 import { ExportMenu } from './export-menu';
 import { NotABugDialog } from './not-a-bug-dialog';
+import { ReportDialog } from './report/report-dialog';
 import { describeOutcome, type VerdictOutcome } from './use-verdict';
 
 export function BulkBar({
@@ -21,6 +24,11 @@ export function BulkBar({
   onOutcome: (text: string) => void;
 }) {
   const [notABug, setNotABug] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const repoNames = [...new Set(findings.map((f) => f.repo))];
+  const oneRepo = repoNames.length === 1 ? (repoNames[0] as string) : null;
+  const jira = useJiraReadiness(oneRepo ?? '');
+  const reportable = commonActions(findings).report;
   const selectedRepos = new Set(findings.map((f) => f.repo));
   return (
     <>
@@ -51,12 +59,32 @@ export function BulkBar({
             <ClipboardCopy />
             Copy for tickets
           </Button>
+          {reportable && oneRepo && jira.ready ? (
+            <Button size="sm" onClick={() => setReporting(true)}>
+              <Send />
+              Report to Jira…
+            </Button>
+          ) : null}
           <Button variant="outline" size="sm" onClick={() => setNotABug(true)}>
             <CircleX />
             Not a bug…
           </Button>
         </div>
       </div>
+      {reportable && !oneRepo ? <p className="px-1 text-xs text-muted-foreground">Select findings of one repository to report them to Jira together.</p> : null}
+      {reporting && oneRepo ? (
+        <ReportDialog
+          repo={oneRepo}
+          findings={findings}
+          open={reporting}
+          onOpenChange={setReporting}
+          onDone={(outcomes) => {
+            const done = outcomes.filter((o) => o.ok).length;
+            onOutcome(`${plural(done, 'finding')} reported${outcomes.length > done ? `; ${outcomes.length - done} refused` : ''}.`);
+            onClear();
+          }}
+        />
+      ) : null}
       {notABug ? (
         <NotABugDialog
           findings={findings}

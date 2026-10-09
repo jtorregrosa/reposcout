@@ -5,9 +5,12 @@ export interface AvailableActions {
   refute: boolean;
   suppress: boolean;
   unsuppress: boolean;
+  // Whether the finding itself can be reported; whether Jira is configured for its repository is asked apart.
+  report: boolean;
+  unlink: boolean;
 }
 
-type Decidable = Pick<FindingView, 'status' | 'stage' | 'decision'>;
+type Decidable = Pick<FindingView, 'status' | 'stage' | 'decision'> & Partial<Pick<FindingView, 'issue'>>;
 
 // The one place that mirrors the server's decide and suppress rules: the Next step bar, the shortcuts, the Not a
 // bug dialog and the bulk bar all read it, so none of them offers what another hides.
@@ -18,6 +21,8 @@ export function availableActions(f: Decidable): AvailableActions {
     refute: undecided && (f.status === 'speculative' || f.status === 'open'),
     suppress: f.status === 'open',
     unsuppress: f.status === 'suppressed',
+    report: f.status === 'open' && f.stage === 'validated' && !f.issue,
+    unlink: !!f.issue,
   };
 }
 
@@ -25,7 +30,14 @@ export function availableActions(f: Decidable): AvailableActions {
 export function commonActions(findings: Decidable[]): AvailableActions {
   const all = findings.map(availableActions);
   const every = (key: keyof AvailableActions) => all.length > 0 && all.every((a) => a[key]);
-  return { confirm: every('confirm'), refute: every('refute'), suppress: every('suppress'), unsuppress: every('unsuppress') };
+  return {
+    confirm: every('confirm'),
+    refute: every('refute'),
+    suppress: every('suppress'),
+    unsuppress: every('unsuppress'),
+    report: every('report'),
+    unlink: every('unlink'),
+  };
 }
 
 export const REASON_MIN = 3;

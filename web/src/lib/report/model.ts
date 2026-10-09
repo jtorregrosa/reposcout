@@ -34,6 +34,7 @@ export type ReportFinding = Pick<
       | 'repro'
       | 'kind'
       | 'personal_data'
+      | 'issue'
     >
   >;
 

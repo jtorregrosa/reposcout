@@ -112,3 +112,12 @@ export interface LockInfo {
 }
 
 export type Census = Record<string, { eligible: number; head: string; at: string }>;
+
+// The Jira issue a finding was reported as.
+export interface IssueLink {
+  key: string;
+  url: string;
+  project: string;
+  reported_by: string;
+  reported_at: string;
+}

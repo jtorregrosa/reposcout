@@ -17,23 +17,47 @@ export interface ActionCall {
   body: Record<string, unknown>;
 }
 
-// Answers the dashboard's requests from the fixture; an action answers with `actions[name]` (an error status
-// and message when it is a string) and is recorded in order.
-export function stubServer(overview: Overview, actions: Record<string, (body: Record<string, unknown>) => string | object> = {}) {
+// An answer with its own status and body, for an action or a lookup that fails the way the server would.
+export const reply = (status: number, body: object) => ({ $status: status, $body: body });
+
+type Answer = string | object;
+
+const answer = (a: Answer) => {
+  if (typeof a === 'string') return { status: 409, body: { error: a } };
+  if ('$status' in a) {
+    const r = a as unknown as { $status: number; $body: object };
+    return { status: r.$status, body: r.$body };
+  }
+  return { status: 200, body: a };
+};
+
+// Answers the dashboard's requests from the fixture. An action answers with `actions[name]` (an error status and
+// message when it is a string) and is recorded in order; a GET to a path in `gets` answers with what it returns.
+export function stubServer(
+  overview: Overview,
+  actions: Record<string, (body: Record<string, unknown>) => Answer> = {},
+  gets: Record<string, (query: URLSearchParams) => Answer> = {},
+) {
   const calls: ActionCall[] = [];
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      const [path = '', qs = ''] = url.split('?');
+      const get = gets[path];
+      if (get) {
+        const a = answer(get(new URLSearchParams(qs)));
+        return json(a.status, a.body);
+      }
       if (url === '/api/overview') return json(200, overview);
       if (url === '/api/session') return json(200, { token: 't' });
       const action = /^\/api\/actions\/(.+)$/.exec(url)?.[1];
       if (action) {
         const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
         calls.push({ action, body });
-        const answer = actions[action]?.(body) ?? {};
-        return typeof answer === 'string' ? json(409, { error: answer }) : json(200, answer);
+        const a = answer(actions[action]?.(body) ?? {});
+        return json(a.status, a.body);
       }
       return json(200, []);
     }),

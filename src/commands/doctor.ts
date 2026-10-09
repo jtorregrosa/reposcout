@@ -1,8 +1,9 @@
 import { resolve } from 'node:path';
 import { buildAgents } from '../claude/agents.js';
 import { claudeVersion } from '../claude/session.js';
-import { loadConfig, loadNotifications, type RepoConfig, type WebhookConfig } from '../config/config.js';
+import { type JiraSite, loadConfig, loadJiraSite, loadNotifications, type RepoConfig, type WebhookConfig } from '../config/config.js';
 import { ExitCode, errorMessage } from '../errors.js';
+import { createJiraClient, jiraCredentials } from '../jira/client.js';
 import { layout, PACKAGE_DIR, ROOT } from '../paths.js';
 import { loadEnv, readPat } from '../security/env.js';
 import { verificationFor } from '../security/sandbox.js';
@@ -19,7 +20,7 @@ interface Check {
   detail: string;
 }
 
-export function doctorCommand({ config }: { config: string }): ExitCode {
+export async function doctorCommand({ config }: { config: string }, { jiraFetch }: { jiraFetch?: typeof fetch } = {}): Promise<ExitCode> {
   const checks: Check[] = [];
   const check = (name: string, fn: () => string) => {
     try {
@@ -86,6 +87,22 @@ export function doctorCommand({ config }: { config: string }): ExitCode {
       if (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol)) throw new Error(`${w.url_env} is set but is not an http(s) URL`);
       return `${w.url_env} set`;
     });
+  }
+  // Reporting to Jira: the site, the credential variables, and whether Jira accepts them. Only the display name is shown.
+  let jira: JiraSite | null = null;
+  check('jira', () => {
+    jira = loadJiraSite(resolve(ROOT, config));
+    return jira ? jira.site : 'not configured; findings are not reported to Jira';
+  });
+  const site = jira as JiraSite | null;
+  if (site) {
+    try {
+      const client = createJiraClient(jiraCredentials(site), jiraFetch ? { fetchFn: jiraFetch } : {});
+      const me = await client.get<{ displayName?: string }>('/rest/api/3/myself');
+      checks.push({ name: `jira credential (${site.email_env}, ${site.token_env})`, ok: true, detail: `accepted for ${me.displayName ?? 'an account'}` });
+    } catch (e) {
+      checks.push({ name: `jira credential (${site.email_env}, ${site.token_env})`, ok: false, detail: errorMessage(e) });
+    }
   }
   check('database', () => {
     const store = openStore(layout());

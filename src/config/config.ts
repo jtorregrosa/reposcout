@@ -41,6 +41,23 @@ export const PROVIDERS = ['azure-devops', 'github', 'local'] as const;
 export const ALLOW_LOCAL_ENV = 'REPOSCOUT_ALLOW_LOCAL_PROVIDER';
 const LOCAL_ERROR = `uses provider "local", which is only for tests and evaluation; set ${ALLOW_LOCAL_ENV}=1 to allow it.`;
 
+export const JIRA_PROJECT = /^[A-Z][A-Z0-9_]+$/;
+export const JIRA_ISSUE = /^[A-Z][A-Z0-9_]+-\d+$/;
+
+// A repository's Jira target: where its findings are reported and what the form starts from.
+const jiraTargetSchema = z.strictObject(
+  {
+    project: z.string().regex(JIRA_PROJECT, 'has a jira "project" that is not a Jira project key.').optional(),
+    issue_type: z.string().trim().min(1, 'has an empty jira "issue_type".').optional(),
+    parent: z.string().regex(JIRA_ISSUE, 'has a jira "parent" that is not an issue key such as PROJ-123.').optional(),
+    labels: z.array(z.string().regex(/^\S+$/, 'has a jira label with a space; Jira labels cannot hold spaces.')).optional(),
+    fields: z.record(z.string().min(1), z.unknown()).optional(),
+  },
+  { error: 'has a jira target with an unknown key; use project, issue_type, parent, labels or fields.' },
+);
+
+export type JiraTarget = z.output<typeof jiraTargetSchema>;
+
 const repoSchema = z.looseObject({
   provider: z.enum(PROVIDERS, { error: 'has an unknown "provider"; use azure-devops or github.' }).default('azure-devops'),
   // With provider local: the directory of the git repository to clone from.
@@ -95,6 +112,7 @@ const repoSchema = z.looseObject({
   // Where Claude Code has no sandbox (native Windows), test_command runs only with this explicit opt-in.
   test_command_unsandboxed: z.boolean({ error: 'test_command_unsandboxed must be true or false.' }).default(false),
   claude: claudeSchema.prefault({}),
+  jira: jiraTargetSchema.optional(),
 });
 
 // A local path opens git's file protocol, which a shared repos.yaml must never be able to switch on by itself.
@@ -130,6 +148,7 @@ export function parseConfig(text: string, path = 'repos.yaml'): RepoConfig[] {
   const root = isPlain(doc) ? doc : {};
   const defaults = isPlain(root.defaults) ? root.defaults : {};
   if (!Array.isArray(root.repos) || root.repos.length === 0) throw new Error(`${path}: "repos" must be a non-empty list.`);
+  const hasSite = root.jira !== undefined && root.jira !== null;
 
   return root.repos.map((raw: unknown) => {
     const entry = isPlain(raw) ? raw : {};
@@ -152,6 +171,9 @@ export function parseConfig(text: string, path = 'repos.yaml'): RepoConfig[] {
     const github = merged.provider === 'github';
     if (github) merged.project ??= merged.organization;
     merged.pat_env ??= github ? 'REPOSCOUT_GITHUB_TOKEN' : 'REPOSCOUT_ADO_PAT';
+    if (merged.jira !== undefined && !hasSite) {
+      throw new Error(`${path}: repo "${String(entry.name ?? entry.repo)}" sets a jira target, but reporting to Jira needs the top-level jira.site.`);
+    }
     const parsed = checkedRepoSchema.safeParse(merged);
     if (parsed.success) return parsed.data;
     const issue = parsed.error.issues[0];
@@ -197,4 +219,35 @@ export function remoteUrl(repo: Pick<RepoConfig, 'provider' | 'organization' | '
   if (repo.provider === 'local') return pathToFileURL(repo.path as string).href;
   if (repo.provider === 'github') return `https://github.com/${enc(repo.organization)}/${enc(repo.repo)}.git`;
   return `https://dev.azure.com/${enc(repo.organization)}/${enc(repo.project)}/_git/${enc(repo.repo)}`;
+}
+
+// Top-level `jira`: the Jira Cloud site findings are reported to. The credential is a secret, so the file only names
+// the environment variables that hold it.
+const ENV_NAME = /^REPOSCOUT_[A-Z0-9_]+$/;
+const jiraSiteSchema = z.strictObject(
+  {
+    site: z
+      .string({ error: 'needs a "site", https://<name>.atlassian.net.' })
+      .regex(/^https:\/\/[a-z0-9][a-z0-9-]*\.atlassian\.net$/, 'must be https://<name>.atlassian.net, a Jira Cloud site.'),
+    email_env: z.string().regex(ENV_NAME, 'needs "email_env" named REPOSCOUT_<something>.').default('REPOSCOUT_JIRA_EMAIL'),
+    token_env: z.string().regex(ENV_NAME, 'needs "token_env" named REPOSCOUT_<something>.').default('REPOSCOUT_JIRA_TOKEN'),
+  },
+  { error: 'has an unknown key; use site, email_env or token_env.' },
+);
+
+export type JiraSite = z.output<typeof jiraSiteSchema>;
+
+export function parseJiraSite(text: string, path = 'repos.yaml'): JiraSite | null {
+  const doc: unknown = parse(text) ?? {};
+  const raw = isPlain(doc) ? doc.jira : undefined;
+  if (raw === undefined || raw === null) return null;
+  const parsed = jiraSiteSchema.safeParse(raw);
+  if (parsed.success) return parsed.data;
+  const issue = parsed.error.issues[0];
+  const where = issue?.path.length ? ` (jira.${issue.path.join('.')})` : '';
+  throw new Error(`${path}: jira ${issue?.message ?? 'is invalid.'}${where}`);
+}
+
+export function loadJiraSite(path: string): JiraSite | null {
+  return parseJiraSite(readFileSync(path, 'utf8'), path);
 }

@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router';
 import { CategoryLabel } from '@/components/category';
+import { IssueBadge } from '@/components/issue-badge';
 import { KindBadge, PersonalDataBadge } from '@/components/kind';
 import { SeverityBadge, severityBorder } from '@/components/severity';
 import { StatusBadge } from '@/components/status-badge';
@@ -74,6 +75,7 @@ const Row = memo(function Row({ finding: f, active, checked, href, showRepo, sho
           {f.verified ? <span className="text-success">reproduced</span> : null}
         </div>
       </Link>
+      {f.issue ? <IssueBadge issue={f.issue} className="mt-3 mr-3 self-start" /> : null}
     </li>
   );
 });

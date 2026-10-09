@@ -11,7 +11,16 @@ RepoScout SHALL keep its state in one SQLite database at `state/reposcout.db` un
 - **THEN** the CLI and the dashboard read and write `<REPOSCOUT_HOME>/state/reposcout.db`
 
 ### Requirement: What the database records
-The database SHALL record, per repository, the branch, the last audited commit overall and per analyzer, the last run, full run and speculative review times, the eligible file count, each file's audit time per analyzer and the files queued again because they were not opened; every finding with its status and full fields; the history of every status change; auditor decisions and label corrections; validation attempts; the reports; failures by day; the file census; one usage row per Claude run; and each run's yield per analyzer.
+The database SHALL record, per repository:
+- the branch, the last audited commit overall and per analyzer;
+- the last run, full run and speculative review times;
+- the eligible file count, each file's audit time per analyzer, and the files queued again because they were not opened;
+- every finding with its status and full fields, and the history of every status change;
+- auditor decisions and label corrections;
+- validation attempts;
+- the Jira issue linked to a finding, with who linked it and when;
+- the reports, failures by day and the file census;
+- one usage row per Claude run, and each run's yield per analyzer.
 
 #### Scenario: State read back after a run
 - **WHEN** a run writes a repository's state and a later run reads it
@@ -20,6 +29,10 @@ The database SHALL record, per repository, the branch, the last audited commit o
 #### Scenario: Attempts read back
 - **WHEN** a validation pass records an unsuccessful attempt and a later validation pass reads the state
 - **THEN** the later pass sees that attempt and its reason
+
+#### Scenario: Issue link outlives a run
+- **WHEN** a finding linked to `API-42` is reported again by a run that rewrites the state
+- **THEN** the finding is still linked to `API-42`
 
 ### Requirement: Every write is a transaction
 Every write to the database MUST be made in a transaction, so a process that dies or fails partway through a write leaves the previous committed state whole.
@@ -102,6 +115,7 @@ On import, the history of each finding SHALL start with what the JSON knew: an e
 - `decisions.json`, with every auditor decision;
 - `labels.json`, with every label correction;
 - `validation-attempts.json`, with every validation attempt;
+- `finding-issues.json`, with every linked Jira issue;
 - `analyzer-yield.json`;
 - `reports.jsonl`, with every stored report and its date;
 - `failures.json`, with every recorded failure and deferral.
@@ -139,9 +153,10 @@ Restoring an export into an empty database SHALL reproduce what the exported dat
 - each finding's current stage;
 - every auditor decision and label correction;
 - every validation attempt;
+- every linked Jira issue;
 - the analyzer yield, reports and failures.
 
-A restore that fails partway MUST leave the database as it was. An export without `validation-attempts.json` SHALL restore with no validation attempts.
+A restore that fails partway MUST leave the database as it was. An export without `validation-attempts.json` SHALL restore with no validation attempts, and one without `finding-issues.json` with no linked issues.
 
 #### Scenario: Restore reproduces the auditor's work
 - **WHEN** a database holds a candidate an auditor confirmed, a finding whose type an auditor corrected, and a finding resolved after being validated
@@ -155,6 +170,10 @@ A restore that fails partway MUST leave the database as it was. An export withou
 #### Scenario: Export from before validation attempts
 - **WHEN** an export has no `validation-attempts.json`
 - **THEN** it restores without error and no finding has validation attempts
+
+#### Scenario: Restore keeps issue links
+- **WHEN** a database holds a finding reported as `API-42` and it is exported and restored
+- **THEN** the restored finding is linked to `API-42` and its stage is `reported`
 
 #### Scenario: Restore fails partway
 - **WHEN** an export holds a report file that cannot be parsed
@@ -181,4 +200,3 @@ The database SHALL record for every auditor decision the status it was made on, 
 #### Scenario: Round trip of a decision on an open finding
 - **WHEN** an auditor refuted an open finding and the database is exported and restored into an empty database
 - **THEN** the restored decision is made on `open` and the finding is `refuted`
-
