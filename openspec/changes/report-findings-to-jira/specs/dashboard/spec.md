@@ -75,7 +75,7 @@ The Findings list SHALL let the auditor select findings by checkbox, by `Space` 
 - Export selection;
 - Copy for tickets;
 - Not a bug: applies one verdict and reason through the existing decide or suppress action, once per finding, and offers a verdict only when every selected finding allows it;
-- Report to Jira: offered when every selected finding is validated, open, has no issue and resolves to the same project and issue type. It opens one form for the shared fields and creates one issue per finding.
+- Report to Jira: offered when every selected finding is validated, open and has no issue, and all belong to one repository with a Jira target. It opens one form for the shared fields and creates one issue per finding.
 
 Both Not a bug and Report to Jira SHALL report which findings succeeded and which were refused.
 
@@ -99,9 +99,9 @@ Both Not a bug and Report to Jira SHALL report which findings succeeded and whic
 - **WHEN** the auditor selects three validated findings of the same repository and reports them with one parent
 - **THEN** three issues are created under that parent, each with its finding's summary and description, and the bar reports 3 reported
 
-#### Scenario: Targets differ
-- **WHEN** the selection holds findings of two repositories whose targets use different projects
-- **THEN** Report to Jira is not offered, and the bar says why
+#### Scenario: Findings of two repositories
+- **WHEN** the selection holds validated findings of two repositories
+- **THEN** Report to Jira is not offered, and the bar says to select findings of one repository
 
 ### Requirement: Export the current view
 The Findings page SHALL offer Export of exactly the findings the current filters show, as a self-contained printable HTML report, a Markdown report, a SARIF 2.1.0 log, or a copy of their fingerprints, and SHALL disable Export when the view is empty. The HTML and Markdown reports SHALL show each finding's issue key and link when it has one.

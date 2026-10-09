@@ -198,7 +198,7 @@ function finding(f: NumberedFinding): string {
     ${part('Suppressed because', paras(f.suppressed_reason), 'note')}
     ${part('Resolution', paras(f.resolution), 'note')}
   </div>
-  <div class="f-foot"><span class="fp">fingerprint ${esc(f.fingerprint)}${f.commit ? ` · commit ${esc(String(f.commit).slice(0, 10))}` : ''}</span><span class="links"><a class="back" href="#${typeAnchor(f.category)}">↑ ${esc(categoryLabel(f.category))}</a><a class="back" href="#index">↑ Index</a></span></div>
+  <div class="f-foot"><span class="fp">fingerprint ${esc(f.fingerprint)}${f.commit ? ` · commit ${esc(String(f.commit).slice(0, 10))}` : ''}${f.issue && /^https:\/\//.test(f.issue.url) ? ` · Jira <a href="${esc(f.issue.url)}">${esc(f.issue.key)}</a>` : ''}</span><span class="links"><a class="back" href="#${typeAnchor(f.category)}">↑ ${esc(categoryLabel(f.category))}</a><a class="back" href="#index">↑ Index</a></span></div>
 </article>`;
 }
 

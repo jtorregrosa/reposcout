@@ -220,4 +220,18 @@ export const MIGRATIONS: string[] = [
     PRIMARY KEY (repo, fingerprint, run_id)
   );
   `,
+  `
+  -- The Jira issue a finding was reported as. Kept apart from findings, which a run rewrites, and dropped with the
+  -- stage when the fingerprint leaves the state; the issue key stays in the stage history note.
+  CREATE TABLE finding_issues (
+    repo TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    key TEXT NOT NULL,
+    url TEXT NOT NULL,
+    project TEXT NOT NULL,
+    reported_by TEXT NOT NULL,
+    reported_at TEXT NOT NULL,
+    PRIMARY KEY (repo, fingerprint)
+  );
+  `,
 ];

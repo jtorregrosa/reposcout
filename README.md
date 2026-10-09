@@ -55,6 +55,7 @@ Create `.env` in the repository root. It is git-ignored and never read by the au
 | `REPOSCOUT_GITHUB_TOKEN` | Optional read-only token for private GitHub repositories; public ones clone without it. Its name is configurable with `pat_env`. |
 | `CLAUDE_CODE_OAUTH_TOKEN` | Output of `claude setup-token`. Required when `claude.auth: isolated`. |
 | `REPOSCOUT_<…>_WEBHOOK` | Optional. The URL of each webhook under `notifications`, in the variable its `url_env` names. |
+| `REPOSCOUT_JIRA_EMAIL`, `REPOSCOUT_JIRA_TOKEN` | Optional. The account email and [API token](https://id.atlassian.com/manage-profile/security/api-tokens) the dashboard reports findings to Jira with. Their names are configurable with `jira.email_env` and `jira.token_env`. |
 
 Then check everything without touching any repository. `doctor` does open `state/reposcout.db`, creating or upgrading it when needed:
 
@@ -88,6 +89,7 @@ With `claude.auth: isolated` (the default), Claude runs with a private `CLAUDE_C
 | `claude.auth` | `isolated` or `login`, see above. |
 | `mode` | The repository's default mode when `run` gets no `--mode`: `incremental`, `full`, `speculative` or `validate`. |
 | `suppressed` | Reviewed false positives, as a list of `fingerprint` and `reason`. See below. |
+| `jira.project`, `.issue_type`, `.parent`, `.labels`, `.fields` | Where the dashboard reports this repository's findings: a Jira project key, an issue type name, a default parent issue key, labels, and default values for custom fields by field id (`customfield_10010`) or name. Set what all repositories share in `defaults.jira`; `fields` merge field by field and `labels` replace. Every value is only a default the report form starts from. See [Reporting to Jira](#reporting-to-jira). |
 
 The top-level `notifications` section, beside `defaults` and `repos`, announces the end of each run:
 
@@ -106,6 +108,31 @@ notifications:
       url_env: REPOSCOUT_TEAMS_WEBHOOK
       format: teams
       min_severity: high
+```
+
+The top-level `jira` section names the Jira Cloud site findings are reported to:
+
+| Key | Meaning |
+| --- | --- |
+| `jira.site` | `https://<name>.atlassian.net`. Jira Server and Data Center are not supported. |
+| `jira.email_env`, `jira.token_env` | The environment variables holding the account email and the API token. Default `REPOSCOUT_JIRA_EMAIL` and `REPOSCOUT_JIRA_TOKEN`; both must start with `REPOSCOUT_`. |
+
+```yaml
+jira:
+  site: https://acme.atlassian.net
+defaults:
+  jira:
+    issue_type: Bug
+    labels: [security-audit]
+    fields:
+      Team: Security          # a select, by option value or id
+repos:
+  - name: orders-api
+    jira:
+      project: ORD
+      parent: ORD-120         # an epic the issues go under by default
+      fields:
+        customfield_10016: 3  # story points, by field id
 ```
 
 To move the verifier, or everything, to Fable, change the aliases. The agent files in `.claude/agents/` stay the source of truth for prompts and tools; the CLI only swaps the model at run time through `--agents`.
@@ -268,8 +295,8 @@ It is organised around the four stages a finding moves through: detect, validate
 
 | Page | Shows |
 | --- | --- |
-| Overview | The **stage pipeline**: for each stage, what it holds now and the one action that moves it on. **Detect** shows open findings and the new ones from the last run, with **New audit**. **Validate** shows Triage, split into detected and speculative, with **Validate detected findings** and **Review speculative candidates**. **Report** shows what is ready to report, with **Export**. **Fix** is shown as not available yet. Each stage opens its Findings queue. Below the pipeline: **Needs attention** (open critical and high findings, new ones first), the latest run, the subscription windows, and one matrix of open findings by severity, switchable between type and category. Repositories whose last audit failed, and have not succeeded since, are flagged at the top. |
-| Findings | The triage workspace. **Queues** group findings by what they ask of you: **Triage** (the default: speculative candidates and open findings still at `detected`), **To report** (open at `validated`), **Reported** (open at `reported`), **Closed** (resolved, suppressed, refuted or duplicate) and **All**. Each shows its count under the current filters. Search, repository, severity and sort are always visible; type, category, stage, status, **New in the last run** and personal data sit in one **Filters** menu, and every active one shows as a chip you can remove. **Discarded by verifier** is a link beside the queues. On Triage, **Validate detected findings** and **Review speculative candidates** start a run for the repositories in scope, after saying what it will try and what it costs. The selected finding opens beside the list. Its header shows severity, status, type, personal data, category and a compact stage bar. The **Next step** bar offers what its queue asks for: **Confirm…** and **Not a bug…** in Triage, **Copy for a ticket** in To report and Reported, **Unsuppress** for a suppressed finding. **Open in VS Code** is always there, and the **More** menu copies the location, the fingerprint or a ticket. Decisions, suppression reasons and resolutions sit above three tabs. **Overview** has the scenario, the anchored code, why it is a bug, the reproduction steps and the suggested fix. **Evidence** has confidence, the specialists, the reproduction test, every validation attempt with its outcome and reason, and the last speculative review. **History** has the stage timeline, every status with a link to the run that set it, and the fingerprint. Tick findings, use `Space`, or shift-click a range to select several; the selection bar offers **Export selection**, **Copy for tickets** and **Not a bug…** for all of them. Every filter, the queue, the selected finding and its tab live in the URL, so a view can be bookmarked or sent to another auditor; links from before the queues still open what they showed. **Export** downloads exactly what the view shows: a self-contained HTML report (open it, then Ctrl+P for a PDF), Markdown, or SARIF 2.1.0 for code scanning. |
+| Overview | The **stage pipeline**: for each stage, what it holds now and the one action that moves it on. **Detect** shows open findings and the new ones from the last run, with **New audit**. **Validate** shows Triage, split into detected and speculative, with **Validate detected findings** and **Review speculative candidates**. **Report** shows what is ready to report, with **Review and report** and **Export**. **Fix** is shown as not available yet. Each stage opens its Findings queue. Below the pipeline: **Needs attention** (open critical and high findings, new ones first), the latest run, the subscription windows, and one matrix of open findings by severity, switchable between type and category. Repositories whose last audit failed, and have not succeeded since, are flagged at the top. |
+| Findings | The triage workspace. **Queues** group findings by what they ask of you: **Triage** (the default: speculative candidates and open findings still at `detected`), **To report** (open at `validated`), **Reported** (open at `reported`), **Closed** (resolved, suppressed, refuted or duplicate) and **All**. Each shows its count under the current filters. Search, repository, severity and sort are always visible; type, category, stage, status, **New in the last run** and personal data sit in one **Filters** menu, and every active one shows as a chip you can remove. **Discarded by verifier** is a link beside the queues. On Triage, **Validate detected findings** and **Review speculative candidates** start a run for the repositories in scope, after saying what it will try and what it costs. The selected finding opens beside the list. Its header shows severity, status, type, personal data, category and a compact stage bar. The **Next step** bar offers what its queue asks for: **Confirm…** and **Not a bug…** in Triage; **Report to Jira…** in To report (**Copy for a ticket** when Jira is not configured for the repository); **Open in Jira** in Reported; **Unsuppress** for a suppressed finding. **Open in VS Code** is always there, and the **More** menu copies the location, the fingerprint or a ticket, and unlinks a Jira issue. Decisions, suppression reasons and resolutions sit above three tabs. **Overview** has the scenario, the anchored code, why it is a bug, the reproduction steps and the suggested fix. **Evidence** has confidence, the specialists, the reproduction test, every validation attempt with its outcome and reason, and the last speculative review. **History** has the stage timeline, every status with a link to the run that set it, and the fingerprint. Tick findings, use `Space`, or shift-click a range to select several; the selection bar offers **Export selection**, **Copy for tickets**, **Not a bug…** and, for findings of one repository waiting in To report, **Report to Jira…** for all of them. Every filter, the queue, the selected finding and its tab live in the URL, so a view can be bookmarked or sent to another auditor; links from before the queues still open what they showed. **Export** downloads exactly what the view shows: a self-contained HTML report (open it, then Ctrl+P for a PDF), Markdown, or SARIF 2.1.0 for code scanning. |
 | Repositories | One row per repository: its Triage and To report counts, open findings by severity, coverage with the full runs still needed, last audit and its health. A file counts as covered once every analyzer has opened it; the full runs still needed use the pace measured over the last five full runs. **Count audits since** restricts coverage to a period, so a new sweep shows its own progress. A repository with no full run yet is sized by `pnpm audit:full --prepare-only`. The row menu offers **Audit this repository** and, when verification is on and findings wait at `detected`, **Validate detected findings**. Each repository has its own page with the same stage pipeline scoped to it, a notice when verification is off (no `test_command`, or no sandbox without `test_command_unsandboxed: true`), and the tabs **Findings** (its matrix), **Coverage** (per analyzer), **Runs** (recent Claude runs) and **Configuration**. |
 | Runs | Every recorded run listed beside the selected one, newest first, with its date, mode, outcome and duration; the run in progress leads, marked live. The selected run shows, live or replayed from its event log, each repository's progress through its stages (for a validation pass, how many findings it tried, reproduced, did not reproduce and found not testable), the subagents grouped by type with their tokens and tool calls, the activity feed (filterable to warnings and errors), and tool calls blocked by policy. **New audit** and **Cancel run** live here. |
 | Insights | What the audits cost and what they yielded. A headline gives the cost per confirmed finding and per finding over the last 7 days. Below it: 7-day totals, one row per Claude run with its cost, yield per analyzer, precision per analyzer, specialists model and prompt version, and coverage across repositories. The repository filter narrows the runs, totals and headline. `/usage`, the page's former address, redirects here. See [Precision and yield](#precision-and-yield). |
@@ -300,6 +327,8 @@ The dashboard can also act:
 | Not a bug: Refute or Suppress | Findings | One dialog with one reason of 3 to 300 characters. **Refute** records an auditor decision in the database (see Confirm / Refute / Undo); **Suppress** writes a permanent entry to `repos.yaml`. Each is offered only where it applies: a speculative candidate can only be refuted, a finding an auditor confirmed can only be suppressed. On a selection, the verdict is applied to each finding in turn through the same action, and the result names every finding that was refused and why. |
 | Suppress / Unsuppress | Findings | Adds or removes the `suppressed` entry in `repos.yaml`. The edit keeps every comment, is validated with the same parser as a run, and replaces the file atomically. The finding shows as *pending* until the next run updates the database. |
 | Confirm / Refute / Undo | Findings (Confirm in the Next step bar, Refute through Not a bug) | Decides a speculative candidate or an open finding with a reason of 3 to 300 characters. On a candidate, confirmed makes it open and refuted makes it refuted. On an open finding, confirmed keeps it open and makes it `validated`, which suits a finding the verifier confirmed from the code alone and you checked yourself; refuted makes it refuted, and it stays refuted and out of reports even when a later audit confirms it again, until you undo the decision or its line changes. A finding with a decision cannot be decided again until the decision is undone. The decision is written to the database at once, recorded in the history with the auditor's name, and re-applied by later runs. **Undo this decision** withdraws it and returns the finding to the status it was decided on. To keep a real bug you will not fix out of the way, suppress it instead. |
+| Report to Jira | Findings | Files a Jira Cloud issue for a validated open finding, or one each for several findings of one repository, with the project, issue type, parent, labels and custom fields of the form, records the issue on the finding and moves it to `reported`. See [Reporting to Jira](#reporting-to-jira). |
+| Unlink issue | Findings | Forgets a finding's Jira issue after a confirmation and returns the finding to `validated`. The issue in Jira is left as it is. |
 | Edit type / personal data | Findings | Corrects the finding's type or personal-data mark in the database at once. The correction holds across runs and backfills and is recorded in the history. |
 | Open in VS Code | Findings | Opens the file at the line in the local clone. The path must resolve inside `workspace/<repo>`, and VS Code is started without a shell. |
 
@@ -312,7 +341,28 @@ The server listens on `127.0.0.1` only and serves the page with a Content Securi
 - **`X-RepoScout-Token`** carries the random token created when `ui` started. A page on another origin cannot read `/api/session` to learn it, and the custom header forces a CORS preflight the server never grants.
 - **The body** is JSON of at most 16 KB, and every field is checked against `repos.yaml` and the database: known repositories, fixed modes, bounded numbers, 32-hex fingerprints, and paths inside the clone.
 
-The dashboard deliberately cannot change `test_command` or other configuration, delete state, or write to Azure DevOps.
+The dashboard deliberately cannot change `test_command` or other configuration, delete state, or write to Azure DevOps or GitHub. The one remote it writes to is Jira, and only to create an issue for a finding on your request.
+
+### Reporting to Jira
+
+With a `jira` section and a target for the repository, a finding in the **To report** queue (open and `validated`) can be filed as a Jira Cloud issue from the dashboard: **Report to Jira…** in its Next step bar, or for several findings of one repository at once from the selection bar.
+
+- **The form starts from the repository's target and asks Jira for the rest.** It shows:
+  - the project and issue type;
+  - the default parent, once Jira confirms it can be one;
+  - the summary, from the finding's title;
+  - the labels;
+  - every custom field with a default;
+  - every field Jira requires for that project and issue type.
+
+  Each field gets the control its type needs: a select with Jira's options, a person, a sprint among the active and future ones, a date, a number or text. The parent is searched by key or title among the not-done issues one level up, usually the epics. Everything is editable. Create issue stays disabled until each required field has a value, and Jira's errors appear next to their fields. A required field of a type RepoScout cannot fill in, such as a cascading select, blocks reporting and is named.
+- **The issue carries the finding.** The description holds where it is, its severity, category and type, the scenario, why it is a bug, the reproduction steps, the code and the suggested fix, all as plain text. The labels add `reposcout` and `reposcout-<fingerprint>`.
+- **Once created**, the finding records the issue key and link and moves to the `reported` stage and the **Reported** queue. The key shows in the list, the detail and the HTML and Markdown exports, and **Open in Jira** opens it.
+- **One issue per finding.** A finding with an issue is never sent again. If an issue was created but its link was not recorded here, the next report finds it by the `reposcout-<fingerprint>` label and links it instead of filing a second one. Do not remove that label in Jira.
+- **Unlink issue** in the More menu forgets an issue filed by mistake and returns the finding to To report. RepoScout never edits, moves or deletes an issue, so close it in Jira yourself.
+- **In a batch**, every finding gets its own issue with the shared fields, one at a time, and each outcome is shown. One refusal does not stop the others.
+
+`doctor` checks the site and the two variables, and that Jira accepts them, printing only the account's display name.
 
 ### Scheduling on Windows
 
@@ -384,6 +434,7 @@ A finding has these fields: `fingerprint`, `repo`, `commit`, `file`, `line`, `ca
 - **Reads.** Read, Grep and Glob are allowed only inside the clone, that audit's `.work/` directory and the verification worktree. An unscoped `Read` rule would let a subagent read any file on the disk, which a prompt injection could turn into credentials in a report; a probe with decoy files confirmed it.
 - **Writes.** Claude can write the raw findings in `.work/` and, when verification is on, files inside the verification worktree. The CLI writes the reports and the state.
 - **No secrets in reports.** Agents describe credentials by location and kind, and the CLI redacts from every finding and log every value in `.env` (8 characters or longer, whatever its name) and known secret patterns: private keys, JWTs, AWS, GitHub (classic and fine-grained), GitLab, npm, Stripe, Google, Slack and Azure DevOps tokens, authorization headers, credentials in URLs and connection strings, and `password`/`token`/`*_PAT`-style assignments.
+- **Jira is the only remote the dashboard writes to.** It creates an issue for a finding when an auditor asks, and never edits, transitions or deletes one. The Jira token and email are read from `.env`, redacted everywhere, stripped from Claude's environment like every `REPOSCOUT_*` variable, and sent only by the dashboard server, as a Basic `Authorization` header, over HTTPS to the configured `*.atlassian.net` site. The server builds every Jira path itself, checks project and issue keys, and does not follow redirects. The page never sees the credential: the form's lookups go through the server and need the dashboard's session token, like actions. A Jira API token carries its account's permissions, so use a dedicated account that can only create issues in the target projects.
 - **Code execution.** Only `test_command`, exactly as configured, only inside `workspace/.verify/<repo>`, which is deleted after the run. The verifier writes the test that command runs, so it is arbitrary code: on macOS, Linux and WSL2 every Bash command of that audit runs in Claude Code's sandbox, with no network and writes only to the worktree and the temp directory, and Claude refuses to start rather than run it unsandboxed (`failIfUnavailable`). Native Windows has **no Claude Code sandbox**, so there verification is off unless the repository sets `test_command_unsandboxed: true`, which runs the command with your user's rights and network access. Leave it unset for repositories you do not trust that far. A [validation pass](#validating-detected-findings) exists to run that command, so with this opt-in every validation pass runs the verifier's tests with your rights and network.
 
 ## Phase 2: Azure Pipelines

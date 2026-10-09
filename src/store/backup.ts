@@ -26,6 +26,7 @@ export interface RestoreSummary {
   decisions: number;
   labels: number;
   attempts: number;
+  issues: number;
   reports: number;
   usage: number;
   failures: number;
@@ -50,6 +51,7 @@ export function writeExport(store: Store, dir: string, at = new Date().toISOStri
   writeJson(join(dir, 'decisions.json'), s.decisions);
   writeJson(join(dir, 'labels.json'), s.labels);
   writeJson(join(dir, 'validation-attempts.json'), s.attempts);
+  writeJson(join(dir, 'finding-issues.json'), s.issues);
   writeJson(join(dir, 'analyzer-yield.json'), s.yields);
   writeFileSync(join(dir, 'reports.jsonl'), jsonLines(s.reports));
   writeJson(join(dir, 'failures.json'), s.failures);
@@ -104,6 +106,9 @@ export function restoreExport(store: Store, dir: string): RestoreSummary {
     const attempts = existsSync(join(dir, 'validation-attempts.json')) ? read<Snapshot['attempts']>(dir, 'validation-attempts.json') : [];
     for (const [repo, rows] of groupBy(attempts, (a) => a.repo)) store.recordAttempts(repo, rows);
 
+    // An export from before Jira reporting has no issues file. Issues go in after the state, which drops the links of
+    // fingerprints it does not hold.
+    const issues = groupBy(existsSync(join(dir, 'finding-issues.json')) ? read<Snapshot['issues']>(dir, 'finding-issues.json') : [], (i) => i.repo);
     const history = groupBy(read<Snapshot['history']>(dir, 'finding-history.json'), (e) => e.repo);
     const stages = groupBy(read<Snapshot['stages']>(dir, 'finding-stages.json'), (e) => e.repo);
     const summary: RestoreSummary = {
@@ -113,6 +118,7 @@ export function restoreExport(store: Store, dir: string): RestoreSummary {
       decisions: decisions.length,
       labels: labels.length,
       attempts: attempts.length,
+      issues: 0,
       reports: 0,
       usage: 0,
       failures: 0,
@@ -122,6 +128,8 @@ export function restoreExport(store: Store, dir: string): RestoreSummary {
       store.writeRepoState(repo, state, { runId: null, at: state.last_run_at ?? manifest.exported_at });
       store.restoreHistory(repo, history.get(repo) ?? []);
       store.restoreStages(repo, stages.get(repo) ?? []);
+      for (const { fingerprint, repo: _repo, ...link } of issues.get(repo) ?? []) store.restoreIssue(repo, fingerprint, link);
+      summary.issues += issues.get(repo)?.length ?? 0;
       summary.repos++;
       summary.findings += Object.keys(state.findings ?? {}).length;
       summary.history += history.get(repo)?.length ?? 0;

@@ -2,6 +2,7 @@ import { ArrowRight, type LucideIcon, Radar, Send, ShieldCheck, Wrench } from 'l
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ExportMenu } from '@/features/findings/export-menu';
 import { NewAuditButton } from '@/features/runs/new-audit';
@@ -103,15 +104,23 @@ export function StagePipeline({ findings, repos, repo = null }: { findings: Find
         about="Validated and open, ready for the people who own the code."
         count={p.report.total}
         to={findingsHref({ queue: 'report', repo })}
-        facts={<span>Work items are not created yet; export them.</span>}
+        facts={<span>Report them to Jira from the To report queue.</span>}
         actions={
-          <ExportMenu
-            findings={toReport}
-            scope={describeScope({ ...DEFAULT_VIEW, queue: 'report', repo })}
-            repos={repos.filter((r) => !repo || r.name === repo)}
-            repoName={repo}
-            what="to report"
-          />
+          <>
+            <Button asChild size="sm" variant="outline">
+              <Link to={findingsHref({ queue: 'report', repo })}>
+                <Send />
+                Review and report
+              </Link>
+            </Button>
+            <ExportMenu
+              findings={toReport}
+              scope={describeScope({ ...DEFAULT_VIEW, queue: 'report', repo })}
+              repos={repos.filter((r) => !repo || r.name === repo)}
+              repoName={repo}
+              what="to report"
+            />
+          </>
         }
       />
       <StageCard

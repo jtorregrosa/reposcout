@@ -2,6 +2,7 @@ import { ChevronDown, ChevronUp, X } from 'lucide-react';
 import { useState } from 'react';
 import { CategoryLabel } from '@/components/category';
 import { CopyButton } from '@/components/copy-button';
+import { IssueBadge } from '@/components/issue-badge';
 import { KindBadge, PersonalDataBadge } from '@/components/kind';
 import { SeverityBadge, severityBorder } from '@/components/severity';
 import { StageProgress } from '@/components/stage';
@@ -12,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAction } from '@/hooks/use-actions';
 import { useHotkeys } from '@/hooks/use-hotkeys';
+import { useJiraReadiness } from '@/hooks/use-jira';
 import { availableActions } from '@/lib/actions';
 import { DETAIL_TABS, type DetailTab } from '@/lib/findings-view';
 import type { FindingView } from '@/lib/types';
@@ -22,6 +24,7 @@ import { EvidenceTab, HistoryTab, OverviewTab } from './finding-tabs';
 import { LabelsEditor } from './labels-editor';
 import { NextStepBar } from './next-step-bar';
 import { NotABugDialog } from './not-a-bug-dialog';
+import { ReportDialog } from './report/report-dialog';
 
 const TAB_LABEL: Record<DetailTab, string> = { overview: 'Overview', evidence: 'Evidence', history: 'History' };
 
@@ -62,6 +65,7 @@ function FindingHeader({ finding: f }: { finding: FindingView }) {
       <div className="flex flex-wrap items-center gap-2">
         <SeverityBadge severity={f.severity} />
         <StatusBadge finding={f} />
+        {f.issue ? <IssueBadge issue={f.issue} /> : null}
         <KindBadge kind={f.kind} />
         {f.personal_data ? <PersonalDataBadge /> : null}
         <CategoryLabel category={f.category} className="text-sm" />
@@ -91,7 +95,8 @@ interface Props {
 }
 
 export function FindingDetail({ finding: f, position, tab, onTab, onPrevious, onNext, onClose }: Props) {
-  const [dialog, setDialog] = useState<'confirm' | 'not-a-bug' | null>(null);
+  const [dialog, setDialog] = useState<'confirm' | 'not-a-bug' | 'report' | null>(null);
+  const jira = useJiraReadiness(f.repo);
   const editor = useAction('openInEditor');
   const actions = availableActions(f);
   const openInEditor = () => editor.mutate({ repo: f.repo, file: f.file, line: f.line });
@@ -107,7 +112,15 @@ export function FindingDetail({ finding: f, position, tab, onTab, onPrevious, on
       <Pager position={position} onPrevious={onPrevious} onNext={onNext} onClose={onClose} />
       <div className="min-w-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto p-5">
         <FindingHeader finding={f} />
-        <NextStepBar finding={f} actions={actions} onConfirm={() => setDialog('confirm')} onNotABug={() => setDialog('not-a-bug')} onOpen={openInEditor} />
+        <NextStepBar
+          finding={f}
+          actions={actions}
+          jira={jira}
+          onConfirm={() => setDialog('confirm')}
+          onNotABug={() => setDialog('not-a-bug')}
+          onReport={() => setDialog('report')}
+          onOpen={openInEditor}
+        />
         <LabelsEditor finding={f} />
         <FindingNotices finding={f} />
         <Tabs value={tab} onValueChange={(v) => onTab(v as DetailTab)}>
@@ -131,6 +144,9 @@ export function FindingDetail({ finding: f, position, tab, onTab, onPrevious, on
       </div>
       {actions.confirm ? <ConfirmDialog finding={f} open={dialog === 'confirm'} onOpenChange={(o) => setDialog(o ? 'confirm' : null)} /> : null}
       <NotABugDialog findings={[f]} open={dialog === 'not-a-bug'} onOpenChange={(o) => setDialog(o ? 'not-a-bug' : null)} />
+      {actions.report && jira.ready ? (
+        <ReportDialog repo={f.repo} findings={[f]} open={dialog === 'report'} onOpenChange={(o) => setDialog(o ? 'report' : null)} />
+      ) : null}
     </article>
   );
 }

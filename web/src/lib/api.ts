@@ -1,10 +1,26 @@
-import type { FindingEvent, Kind, Overview, RunEvent, StageEvent, StartRunBody, ValidationAttempt } from './types';
+import type {
+  FindingEvent,
+  Kind,
+  Overview,
+  ParentRef,
+  ReportBody,
+  ReportForm,
+  ReportOutcome,
+  RunEvent,
+  SprintRef,
+  StageEvent,
+  StartRunBody,
+  UserRef,
+  ValidationAttempt,
+} from './types';
 
 export class ApiError extends Error {
   override name = 'ApiError';
   constructor(
     readonly status: number,
     message: string,
+    // Jira's message per field id, when the error came from a report.
+    readonly fields: Record<string, string> = {},
   ) {
     super(message);
   }
@@ -32,16 +48,28 @@ const sessionToken = () => {
   return session;
 };
 
+// Reads that spend a credential on the server, such as the Jira lookups, carry the session token like actions.
+async function getAuthed<T>(path: string, query: Record<string, string | undefined>): Promise<T> {
+  const qs = new URLSearchParams(Object.entries(query).filter((e): e is [string, string] => e[1] !== undefined && e[1] !== ''));
+  const res = await fetch(`${path}?${qs.toString()}`, { headers: { Accept: 'application/json', 'X-RepoScout-Token': await sessionToken() } });
+  const data = (await res.json().catch(() => ({}))) as { error?: string; fields?: Record<string, string> };
+  if (!res.ok) {
+    if (res.status === 403) session = null;
+    throw new ApiError(res.status, data.error ?? `HTTP ${res.status}`, data.fields);
+  }
+  return data as T;
+}
+
 async function post<T>(action: string, body: object = {}): Promise<T> {
   const res = await fetch(`/api/actions/${action}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-RepoScout-Token': await sessionToken() },
     body: JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  const data = (await res.json().catch(() => ({}))) as { error?: string; fields?: Record<string, string> };
   if (!res.ok) {
     if (res.status === 403) session = null;
-    throw new ApiError(res.status, data.error ?? `HTTP ${res.status}`);
+    throw new ApiError(res.status, data.error ?? `HTTP ${res.status}`, data.fields);
   }
   return data as T;
 }
@@ -70,4 +98,13 @@ export const api = {
   label: (ref: FindingRef & { kind?: Kind; personal_data?: boolean }) =>
     post<{ kind: Kind | null; personal_data: boolean | null; set_by: string }>('label', ref),
   openInEditor: (target: { repo: string; file: string; line: number }) => post<{ opened: string }>('open', target),
+  report: (body: ReportBody) => post<ReportOutcome[]>('report', body),
+  unlink: (ref: FindingRef) => post<{ unlinked: string }>('unlink', ref),
+};
+
+export const jira = {
+  form: (repo: string, project?: string, issueType?: string) => getAuthed<ReportForm>('/api/jira/meta', { repo, project, issue_type: issueType }),
+  parents: (project: string, issueType: string, q: string) => getAuthed<ParentRef[]>('/api/jira/parents', { project, issue_type: issueType, q }),
+  users: (project: string, q: string) => getAuthed<UserRef[]>('/api/jira/users', { project, q }),
+  sprints: (project: string) => getAuthed<SprintRef[]>('/api/jira/sprints', { project }),
 };

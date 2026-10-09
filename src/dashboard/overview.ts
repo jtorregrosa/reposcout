@@ -1,9 +1,10 @@
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ANALYZERS } from '../config/analyzers.js';
-import { loadConfig, type RepoConfig } from '../config/config.js';
+import { loadConfig, loadJiraSite, type RepoConfig } from '../config/config.js';
 import { errorMessage } from '../errors.js';
 import { MAX_UNSUCCESSFUL_ATTEMPTS } from '../findings/validation.js';
+import { jiraReady } from '../jira/client.js';
 import { layout as layoutOf } from '../paths.js';
 import { verificationState } from '../security/sandbox.js';
 import { auditsByAnalyzer, costPerFile, fullRunPace, fullyAudited } from '../state/coverage.js';
@@ -83,6 +84,7 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
   const labels = store.labelsFor(repo.name);
   const stages = store.stagesFor(repo.name);
   const attempts = store.attemptsFor(repo.name);
+  const issues = store.issuesFor(repo.name);
   for (const [fingerprint, entry] of Object.entries(state?.findings ?? {})) {
     let status = entry.status;
     let pending = false;
@@ -120,6 +122,7 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
       stage: stages.get(fingerprint)?.stage ?? 'detected',
       stage_since: stages.get(fingerprint)?.since ?? null,
       stage_source: stages.get(fingerprint)?.source ?? null,
+      issue: issues.get(fingerprint) ?? null,
     });
   }
 
@@ -153,14 +156,18 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
       oldest_times: Object.keys(by[first] ?? {}).map((f) => ANALYZERS.map((a) => by[a]?.[f] ?? '').sort()[0]),
     },
     counts,
+    jira: repo.jira ? { project: repo.jira.project ?? null, issue_type: repo.jira.issue_type ?? null } : null,
   };
 }
 
 export function readOverview(root: string, configPath: string, store: Store): Overview {
   let repos: RepoConfig[] = [];
   let configError: string | null = null;
+  let jira: Overview['jira'] = null;
   try {
     repos = loadConfig(configPath);
+    const site = loadJiraSite(configPath);
+    if (site) jira = { site: site.site, ready: jiraReady(site) };
   } catch (e) {
     configError = errorMessage(e);
   }
@@ -196,6 +203,7 @@ export function readOverview(root: string, configPath: string, store: Store): Ov
     precision: precisionCells(store.precisionFacts(), new Map(repos.map((r) => [r.name, new Set((r.suppressed ?? []).map((s) => s.fingerprint))]))),
     yields: store.yields(),
     run_results: store.runResults(),
+    jira,
   };
 }
 

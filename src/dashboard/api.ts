@@ -4,14 +4,28 @@ import type { Analyzer } from '../config/analyzers.js';
 import type { Stage, StageEvent, StageSource } from '../findings/stage.js';
 import type { Discard, Finding, FindingStatus, Severity } from '../findings/types.js';
 import type { RunResult, YieldRow } from '../report/types.js';
-import type { Decision, FindingEvent, LabelOverride, LockInfo, RateLimit, UsageRow, ValidationAttempt } from '../state/types.js';
+import type { Decision, FindingEvent, IssueLink, LabelOverride, LockInfo, RateLimit, UsageRow, ValidationAttempt } from '../state/types.js';
 
 export type { Category, Confidence, Kind, Repro } from '../findings/types.js';
+export type {
+  FieldKind,
+  FieldOption,
+  FieldSpec,
+  FormValue,
+  IssueTypeRef,
+  ParentRef,
+  ReportBody,
+  ReportForm,
+  ReportOutcome,
+  SprintRef,
+  UserRef,
+} from '../jira/types.js';
 export type {
   Analyzer,
   Decision,
   FindingEvent,
   FindingStatus,
+  IssueLink,
   LabelOverride,
   RateLimit,
   RunResult,
@@ -56,6 +70,8 @@ export interface FindingView extends Finding {
   stage: Stage;
   stage_since: string | null;
   stage_source: StageSource | null;
+  // The Jira issue the finding was reported as.
+  issue: IssueLink | null;
 }
 
 export interface DiscardView extends Discard {
@@ -95,6 +111,8 @@ export interface RepoView {
   last_read_coverage: { read: number; selected: number } | null;
   coverage: RepoCoverage;
   counts: FindingCounts;
+  // Where its findings are reported, when it has a Jira target.
+  jira: { project: string | null; issue_type: string | null } | null;
 }
 
 export interface FailureView {
@@ -128,6 +146,8 @@ export interface Overview {
   yields: YieldRow[];
   // What each recent run reported for the first time, newest first.
   run_results: RunResult[];
+  // The Jira site findings are reported to, and whether its credential variables are set. Never the credential.
+  jira: { site: string; ready: boolean } | null;
 }
 
 export interface StartRunBody {

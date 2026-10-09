@@ -78,8 +78,8 @@ program
   .command('doctor')
   .description('Check prerequisites without touching any repository')
   .addOption(configOption())
-  .action((flags: { config: string }) => {
-    process.exitCode = doctorCommand(flags);
+  .action(async (flags: { config: string }) => {
+    process.exitCode = await doctorCommand(flags);
   });
 
 program

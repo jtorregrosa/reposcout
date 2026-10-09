@@ -3,7 +3,7 @@ import type { FindingEntry, FindingStatus } from './types.js';
 export const STAGES = ['detected', 'validated', 'reported', 'fixed'] as const;
 export type Stage = (typeof STAGES)[number];
 
-export type StageSource = 'initial' | 'reproduced' | 'auditor' | 'resolved' | 'reopened' | 'withdrawn' | 'upgrade';
+export type StageSource = 'initial' | 'reproduced' | 'auditor' | 'reported' | 'unlinked' | 'resolved' | 'reopened' | 'withdrawn' | 'upgrade';
 
 export interface StageState {
   stage: Stage;

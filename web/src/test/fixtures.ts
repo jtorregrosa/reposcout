@@ -36,6 +36,7 @@ export function finding(over: Partial<FindingView> = {}): FindingView {
     stage: 'detected',
     stage_since: '2026-10-01T08:00:00.000Z',
     stage_source: 'initial',
+    issue: null,
     ...over,
   };
 }
@@ -66,6 +67,7 @@ export function repo(over: Partial<RepoView> = {}): RepoView {
       to_validate: 0,
       by_severity: { critical: 0, high: 0, medium: 0, low: 0 },
     },
+    jira: null,
     ...over,
   };
 }
@@ -87,6 +89,7 @@ export function overview(over: Partial<Overview> = {}): Overview {
     precision: [],
     yields: [],
     run_results: [],
+    jira: null,
     ...over,
   };
 }

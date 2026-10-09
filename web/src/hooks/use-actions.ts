@@ -17,6 +17,8 @@ const SUCCESS: Record<Action, string> = {
   decide: 'Decision recorded. It holds across runs.',
   undecide: 'Decision withdrawn.',
   label: 'Labels saved. They hold across runs.',
+  report: 'Reported to Jira.',
+  unlink: 'Issue unlinked. It is unchanged in Jira.',
 };
 
 export function useInvalidateAfterAction() {
