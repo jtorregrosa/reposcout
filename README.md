@@ -313,9 +313,20 @@ Every path here, like `repos.yaml`, `.env`, `workspace/`, `.claude-home/` and `e
 
 ```sh
 node dist/cli.js db info                 # where it is, its schema version and what it holds
-node dist/cli.js db export               # the state, usage, finding history and stage history as JSON, under exports/<timestamp>/
+node dist/cli.js db export               # the whole database as JSON, under exports/<timestamp>/
 node dist/cli.js db export --out backup  # the same, into backup/
+node dist/cli.js db import --from backup # restore that export into an empty database
 ```
+
+An export is a backup that restores. It is read from one snapshot, so a run writing at the same time cannot split it. It holds:
+
+- every repository's state in `state/<repo>.json`, plus `state/census.json` and `state/usage.jsonl`;
+- the status history with who made each change (`finding-history.json`) and the stage history (`finding-stages.json`);
+- auditor decisions (`decisions.json`) and label corrections (`labels.json`);
+- analyzer yield, reports (`reports.jsonl`) and failures;
+- a `manifest.json` naming the format, `reposcout/export@1`.
+
+`db import --from <dir>` restores all of it in one transaction, into a database that holds no state. It refuses a directory without that manifest, and leaves the database untouched when any file fails to read. The format is versioned apart from the schema, so an export restores into a newer RepoScout.
 
 Earlier versions kept state in `state/<repo>.json`, `state/usage.jsonl`, `state/census.json` and `reports/<date>/failures.json`. The first time a newer version opens an empty database, it imports all of them in one transaction and leaves the files as they were; they are not read again. `db import` does the same by hand and refuses a database that already holds state. The history of an imported finding starts with what the JSON knew: when it was first seen, and when it was resolved or refuted.
 
@@ -345,7 +356,7 @@ A finding has these fields: `fingerprint`, `repo`, `commit`, `file`, `line`, `ca
 
 ## Phase 2: Azure Pipelines
 
-> **Not adapted to the database yet.** The job below commits `state/` back to the repository, which suited JSON files but not a binary SQLite file: it would have no diffs and would conflict between runs. Before enabling it, decide where the database lives between runs (a committed `db export`, a pipeline artifact, or external storage).
+> **Not adapted to the database yet.** The job below commits `state/` back to the repository, which suited JSON files but not a binary SQLite file: it would have no diffs and would conflict between runs. Before enabling it, decide where the database lives between runs (a committed `db export` restored with `db import --from`, a pipeline artifact, or external storage).
 
 `azure-pipelines.yml` has `trigger: none`, `pr: none` and its schedules commented out. To enable it:
 
@@ -390,7 +401,7 @@ These variables exist for the tests and the evaluation; a normal installation se
 
 | Variable | Effect |
 | --- | --- |
-| `REPOSCOUT_HOME` | The data directory: `repos.yaml`, `.env`, `state/`, `reports/`, `workspace/`, `.claude-home/` and `exports/` live there instead of in the RepoScout directory. The code (`dist/`, `web/dist/` and the skill and agents in `.claude/`) still comes from the package, and Claude is still started in it. `--config` and `db export --out` are relative to it. |
+| `REPOSCOUT_HOME` | The data directory: `repos.yaml`, `.env`, `state/`, `reports/`, `workspace/`, `.claude-home/` and `exports/` live there instead of in the RepoScout directory. The code (`dist/`, `web/dist/` and the skill and agents in `.claude/`) still comes from the package, and Claude is still started in it. `--config`, `db export --out` and `db import --from` are relative to it. |
 | `REPOSCOUT_CLAUDE_BIN` | Starts this executable instead of `claude` from `PATH`, for a run and for `doctor`, which reports it. A `.js` or `.mjs` path is run with the current Node, so a script works on Windows without a shell or a `.cmd` shim. |
 | `REPOSCOUT_ALLOW_LOCAL_PROVIDER` | `1` allows `provider: local`, which clones from a directory on disk. |
 

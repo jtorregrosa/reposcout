@@ -1,8 +1,8 @@
-import { appendFileSync, mkdirSync, statSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { ExitCode } from '../errors.js';
-import { writeJson } from '../fs.js';
+import { ExitCode, errorMessage } from '../errors.js';
 import { layout, ROOT } from '../paths.js';
+import { restoreExport, writeExport } from '../store/backup.js';
 import { openStore, Store } from '../store/index.js';
 import { importLegacy } from '../store/legacy.js';
 
@@ -35,7 +35,7 @@ export function dbInfoCommand(): ExitCode {
   return ExitCode.Ok;
 }
 
-export function dbImportCommand(): ExitCode {
+export function dbImportCommand({ from }: { from?: string } = {}): ExitCode {
   const paths = layout();
   const store = new Store(paths.dbFile);
   try {
@@ -43,38 +43,32 @@ export function dbImportCommand(): ExitCode {
       console.error('reposcout: the database already holds state; importing again would duplicate usage and history. Nothing was changed.');
       return ExitCode.Failed;
     }
+    if (from) {
+      const dir = resolve(ROOT, from);
+      const r = restoreExport(store, dir);
+      console.log(
+        `Restored ${r.repos} repositories, ${r.findings} findings, ${r.history} history events, ${r.decisions} decisions, ${r.labels} label corrections, ${r.reports} reports, ${r.usage} usage rows and ${r.failures} failures from ${dir} into ${paths.dbFile}.`,
+      );
+      return ExitCode.Ok;
+    }
     const summary = importLegacy(store, paths);
     console.log(
       `Imported ${summary.repos} repositories, ${summary.findings} findings, ${summary.reports} reports, ${summary.usage} usage rows and ${summary.failures} failures into ${paths.dbFile}.`,
     );
     return ExitCode.Ok;
+  } catch (e) {
+    console.error(`reposcout: ${errorMessage(e)} Nothing was changed.`);
+    return ExitCode.Failed;
   } finally {
     store.close();
   }
 }
 
-// Writes the state back out in the JSON shape RepoScout used before SQLite, plus each finding's history: readable,
-// diffable, and importable again into an empty database.
+// Writes the database as JSON: readable, diffable, and restorable into an empty database with db import --from.
 export function dbExportCommand({ out }: { out?: string }): ExitCode {
-  const paths = layout();
-  const store = openStore(paths);
+  const store = openStore(layout());
   const dir = resolve(ROOT, out ?? join('exports', new Date().toISOString().replace(/[:.]/g, '-')));
-  const stateDir = join(dir, 'state');
-  mkdirSync(stateDir, { recursive: true });
-  for (const repo of store.repoNames()) {
-    const state = store.readRepoState(repo);
-    if (state) writeJson(join(stateDir, `${repo}.json`), state);
-  }
-  writeJson(join(stateDir, 'census.json'), store.census());
-  const usage = join(stateDir, 'usage.jsonl');
-  for (const row of store.usage(Number.MAX_SAFE_INTEGER)) appendFileSync(usage, `${JSON.stringify(row)}\n`);
-  const events = store.db.prepare('SELECT repo, fingerprint, at, run_id, from_status, to_status, note FROM finding_events ORDER BY id').all();
-  writeJson(join(dir, 'finding-history.json'), events);
-  const stages = store.db
-    .prepare('SELECT repo, fingerprint, at, run_id, from_stage, to_stage, source, note, actor FROM finding_stage_events ORDER BY id')
-    .all();
-  writeJson(join(dir, 'finding-stages.json'), stages);
-  writeJson(join(dir, 'analyzer-yield.json'), store.yields(Number.MAX_SAFE_INTEGER));
-  console.log(`Exported ${store.repoNames().length} repositories and ${events.length} history events to ${dir}`);
+  const summary = writeExport(store, dir);
+  console.log(`Exported ${summary.repos} repositories and ${summary.history} history events to ${dir}`);
   return ExitCode.Ok;
 }

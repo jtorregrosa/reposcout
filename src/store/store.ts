@@ -102,6 +102,22 @@ function applyLabels(f: Finding, o: LabelOverride | undefined): Finding {
 
 const KIND_NAMES: Record<Kind, string> = { bug: 'Bug', vulnerability: 'Vulnerability', chore: 'Chore' };
 
+type Keyed<T> = T & { repo: string; fingerprint: string };
+
+export interface Snapshot {
+  schemaVersion: number;
+  states: RepoState[];
+  census: Census;
+  usage: UsageRow[];
+  history: Keyed<FindingEvent>[];
+  stages: Keyed<StageEvent>[];
+  decisions: Keyed<Decision>[];
+  labels: Keyed<LabelOverride>[];
+  yields: YieldRow[];
+  reports: { date: string; report: RepoReport }[];
+  failures: { date: string; repo: string; error: string; deferred: boolean; at: string }[];
+}
+
 export interface WriteContext {
   runId: string | null;
   at: string;
@@ -401,6 +417,84 @@ export class Store {
     return this.db
       .prepare('SELECT at, run_id, from_stage, to_stage, source, note, actor FROM finding_stage_events WHERE repo = ? AND fingerprint = ? ORDER BY id')
       .all(repo, fingerprint) as StageEvent[];
+  }
+
+  // Everything an export holds, read in one transaction so a run committing meanwhile cannot split it.
+  snapshot(): Snapshot {
+    return this.db.transaction(
+      (): Snapshot => ({
+        schemaVersion: this.schemaVersion,
+        states: this.repoNames().flatMap((r) => this.readRepoState(r) ?? []),
+        census: this.census(),
+        usage: this.usage(Number.MAX_SAFE_INTEGER),
+        history: this.db
+          .prepare('SELECT repo, fingerprint, at, run_id, from_status, to_status, note, actor FROM finding_events ORDER BY id')
+          .all() as Snapshot['history'],
+        stages: this.db
+          .prepare('SELECT repo, fingerprint, at, run_id, from_stage, to_stage, source, note, actor FROM finding_stage_events ORDER BY id')
+          .all() as Snapshot['stages'],
+        decisions: this.db
+          .prepare('SELECT repo, fingerprint, verdict, reason, decided_by, decided_at FROM triage ORDER BY repo, fingerprint')
+          .all() as Snapshot['decisions'],
+        labels: (
+          this.db.prepare('SELECT repo, fingerprint, kind, personal_data, set_by, set_at FROM labels ORDER BY repo, fingerprint').all() as (Omit<
+            Snapshot['labels'][number],
+            'personal_data'
+          > & { personal_data: number | null })[]
+        ).map((l) => ({ ...l, personal_data: l.personal_data == null ? null : l.personal_data === 1 })),
+        yields: this.yields(Number.MAX_SAFE_INTEGER),
+        reports: (this.db.prepare('SELECT date, data FROM reports ORDER BY date, generated_at, run_id').all() as { date: string; data: string }[]).map((r) => ({
+          date: r.date,
+          report: JSON.parse(r.data) as RepoReport,
+        })),
+        failures: (
+          this.db.prepare('SELECT date, repo, error, deferred, at FROM failures ORDER BY date, repo').all() as {
+            date: string;
+            repo: string;
+            error: string;
+            deferred: number;
+            at: string;
+          }[]
+        ).map((f) => ({ ...f, deferred: f.deferred === 1 })),
+      }),
+    )();
+  }
+
+  // Replaces a repository's status history with entries from an export, which carry their actors.
+  restoreHistory(repo: string, events: Keyed<FindingEvent>[]): void {
+    this.db.prepare('DELETE FROM finding_events WHERE repo = ?').run(repo);
+    const insert = this.db.prepare(
+      'INSERT INTO finding_events (repo, fingerprint, at, run_id, from_status, to_status, note, actor) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    for (const e of events) insert.run(repo, e.fingerprint, e.at, e.run_id, e.from_status, e.to_status, e.note, e.actor);
+  }
+
+  // Replaces a repository's stage history with entries from an export. Each fingerprint in the state takes its stage
+  // from its latest entry; one with none keeps the stage the state write gave it.
+  restoreStages(repo: string, events: Keyed<StageEvent>[]): void {
+    this.db.prepare('DELETE FROM finding_stage_events WHERE repo = ?').run(repo);
+    const insert = this.db.prepare(
+      'INSERT INTO finding_stage_events (repo, fingerprint, at, run_id, from_stage, to_stage, source, note, actor) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    const latest = new Map<string, StageEvent>();
+    for (const e of events) {
+      insert.run(repo, e.fingerprint, e.at, e.run_id, e.from_stage, e.to_stage, e.source, e.note, e.actor);
+      latest.set(e.fingerprint, e);
+    }
+    const current = this.db.prepare(`UPDATE finding_stages SET stage = ?, source = ?, since = ? WHERE repo = ? AND fingerprint = ?`);
+    for (const [fingerprint, e] of latest) current.run(e.to_stage, e.source, e.at, repo, fingerprint);
+  }
+
+  restoreDecision(repo: string, fingerprint: string, d: Decision): void {
+    this.db
+      .prepare('INSERT INTO triage (repo, fingerprint, verdict, reason, decided_by, decided_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(repo, fingerprint, d.verdict, d.reason, d.decided_by, d.decided_at);
+  }
+
+  restoreLabels(repo: string, fingerprint: string, o: LabelOverride): void {
+    this.db
+      .prepare('INSERT INTO labels (repo, fingerprint, kind, personal_data, set_by, set_at) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(repo, fingerprint, o.kind, o.personal_data == null ? null : Number(o.personal_data), o.set_by, o.set_at);
   }
 
   // The stage a finding had before its latest move to fixed, or before its latest auditor confirmation.

@@ -139,7 +139,7 @@ backfill('backfill-kind', 'Label findings that have no type yet as bug, vulnerab
   },
 );
 
-const db = program.command('db').description('The SQLite database under state/: inspect, import the older JSON state, export it as JSON');
+const db = program.command('db').description('The SQLite database under state/: inspect, import the older JSON state, export and restore it as JSON');
 
 db.command('info')
   .description('Where the database is and what it holds')
@@ -148,13 +148,14 @@ db.command('info')
   });
 
 db.command('import')
-  .description('Import the JSON state of older versions into an empty database (also done automatically on first use)')
-  .action(() => {
-    process.exitCode = dbImportCommand();
+  .description('Import the JSON state of older versions, or restore a db export, into an empty database')
+  .option('--from <dir>', 'restore the export in this directory, relative to the data directory')
+  .action((flags: { from?: string }) => {
+    process.exitCode = dbImportCommand(flags);
   });
 
 db.command('export')
-  .description('Write the state, usage and finding history as JSON files')
+  .description('Write the whole database as JSON files that db import --from restores')
   .option('--out <dir>', 'output directory, relative to the data directory (default: exports/<timestamp>)')
   .action((flags: { out?: string }) => {
     process.exitCode = dbExportCommand(flags);
