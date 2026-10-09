@@ -18,7 +18,7 @@ import { useNow } from '@/hooks/use-now';
 // A run that has not stopped this long after a cancel can be killed outright.
 const FORCE_AFTER_MS = 15_000;
 
-export function CancelRun({ runId }: { runId: string | null }) {
+export function CancelRun({ runId, size = 'default' }: { runId: string | null; size?: 'default' | 'sm' }) {
   const cancel = useAction('cancel');
   const force = useAction('forceStop');
   // Remembered with the run it was for, so a cancel never carries over to the next run.
@@ -30,7 +30,7 @@ export function CancelRun({ runId }: { runId: string | null }) {
     <div className="flex items-center gap-2">
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="outline" disabled={requestedAt != null}>
+          <Button variant="outline" size={size} disabled={requestedAt != null}>
             <Square />
             {requestedAt != null ? 'Cancelling…' : 'Cancel run'}
           </Button>
@@ -53,7 +53,7 @@ export function CancelRun({ runId }: { runId: string | null }) {
       {requestedAt != null && now - requestedAt > FORCE_AFTER_MS ? (
         <AlertDialog>
           <AlertDialogTrigger asChild>
-            <Button variant="destructive">
+            <Button variant="destructive" size={size}>
               <OctagonX />
               Force stop
             </Button>

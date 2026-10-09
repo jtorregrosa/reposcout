@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { FlaskConical } from 'lucide-react';
 import { useId } from 'react';
-import { api } from '@/lib/api';
 import { VALIDATION_OUTCOME_LABEL } from '@/lib/domain';
 import { formatDateTime } from '@/lib/format';
+import { validationsQuery } from '@/lib/queries';
 import type { FindingView } from '@/lib/types';
 
 // Matches the CLI: after this many unsuccessful tries a validation pass stops picking the finding.
@@ -11,10 +11,7 @@ const MAX_UNSUCCESSFUL_ATTEMPTS = 2;
 
 export function ValidationAttempts({ finding: f }: { finding: FindingView }) {
   const titleId = useId();
-  const { data } = useQuery({
-    queryKey: ['finding-validations', f.repo, f.fingerprint, f.stage],
-    queryFn: () => api.validationAttempts(f.repo, f.fingerprint),
-  });
+  const { data } = useQuery(validationsQuery(f));
   if (!data?.length) return null;
   const unsuccessful = data.filter((a) => a.outcome !== 'reproduced').length;
   return (

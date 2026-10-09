@@ -1,15 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Page, PageHeader } from '@/components/page';
-import { ErrorAlert, LoadingPage } from '@/components/query-state';
 import { StatCard } from '@/components/stat-card';
 import { SubscriptionCard } from '@/components/subscription-card';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { CoverageSummary } from '@/features/coverage/coverage-summary';
 import { useOverview } from '@/hooks/use-overview';
 import { formatDateTime, formatDuration, formatTokens, formatUsd, percent } from '@/lib/format';
-import { costSummary } from '@/lib/metrics';
+import { type CostSummary, costSummary } from '@/lib/metrics';
 import type { UsageRow } from '@/lib/types';
 import { PrecisionCard } from './precision-card';
 import { YieldCard } from './yield-card';
@@ -22,10 +22,36 @@ const tokens = (u: UsageRow, key: 'input' | 'output') => Object.values((u.models
 const subagentRuns = (u: UsageRow) =>
   typeof u.subagent_runs === 'number' ? u.subagent_runs : Object.values((u.subagents ?? {}) as Record<string, number>).reduce((a, b) => a + b, 0);
 
-export function UsagePage() {
-  const { data: ov, isLoading, error } = useOverview();
+// What one finding cost to find, the number this page exists to answer.
+function CostHeadline({ cost }: { cost: CostSummary }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>Last 7 days, API-equivalent cost</CardDescription>
+        <CardTitle className="flex flex-wrap items-baseline gap-x-8 gap-y-2">
+          <span>
+            <span className="text-3xl font-semibold tabular-nums">{formatUsd(cost.per_confirmed)}</span>
+            <span className="ml-2 text-sm font-normal text-muted-foreground">per confirmed finding</span>
+          </span>
+          <span>
+            <span className="text-2xl font-semibold tabular-nums">{formatUsd(cost.per_finding)}</span>
+            <span className="ml-2 text-sm font-normal text-muted-foreground">per finding, speculative included</span>
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="text-xs text-muted-foreground">
+        {cost.findings
+          ? `${cost.confirmed} confirmed and ${cost.findings - cost.confirmed} speculative findings were new in this period. Every run counts toward the cost, including the ones that found nothing.`
+          : 'No new finding in this period.'}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function InsightsPage() {
+  const ov = useOverview();
   const [repo, setRepo] = useState(ALL);
-  const rows = useMemo(() => [...(ov?.usage ?? [])].reverse().filter((u) => repo === ALL || u.repo === repo), [ov, repo]);
+  const rows = useMemo(() => [...ov.usage].reverse().filter((u) => repo === ALL || u.repo === repo), [ov, repo]);
   const week = useMemo(() => {
     const since = Date.now() - WEEK_MS;
     const recent = rows.filter((u) => Date.parse(u.at ?? u.date) >= since);
@@ -34,9 +60,9 @@ export function UsagePage() {
     return {
       cost: costSummary(
         recent,
-        inScope(ov?.run_results ?? [], (r) => r.generated_at),
+        inScope(ov.run_results, (r) => r.generated_at),
       ),
-      yields: inScope(ov?.yields ?? [], (y) => y.at),
+      yields: inScope(ov.yields, (y) => y.at),
       runs: recent.length,
       failed: recent.filter((u) => !u.ok).length,
       files: recent.reduce((a, u) => a + (u.files ?? 0), 0),
@@ -46,26 +72,11 @@ export function UsagePage() {
     };
   }, [rows, ov, repo]);
 
-  if (isLoading) {
-    return (
-      <Page>
-        <LoadingPage />
-      </Page>
-    );
-  }
-  if (error || !ov) {
-    return (
-      <Page>
-        <ErrorAlert error={error} />
-      </Page>
-    );
-  }
-
   return (
     <Page>
       <PageHeader
-        title="Usage"
-        description="What each Claude run cost and what it yielded. Totals cover the last 7 days; precision covers every finding people have judged."
+        title="Insights"
+        description="What the audits cost, what they found and how often people kept it. Totals cover the last 7 days; precision covers every finding people have judged."
         actions={
           <Select value={repo} onValueChange={setRepo}>
             <SelectTrigger className="w-56" aria-label="Repository">
@@ -82,6 +93,7 @@ export function UsagePage() {
           </Select>
         }
       />
+      <CostHeadline cost={week.cost} />
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="grid gap-4 sm:grid-cols-2 lg:col-span-2">
           <StatCard label="Claude runs" value={week.runs} footer={week.failed ? `${week.failed} did not complete` : 'all completed'} />
@@ -98,9 +110,9 @@ export function UsagePage() {
             footer={week.cost.runs < week.runs ? `${week.cost.runs} of ${week.runs} runs reported a cost` : 'what the runs would cost billed through the API'}
           />
           <StatCard
-            label="Cost per confirmed finding"
-            value={formatUsd(week.cost.per_confirmed)}
-            footer={`${formatUsd(week.cost.per_finding)} per finding including speculative · ${week.cost.confirmed} confirmed, ${week.cost.findings - week.cost.confirmed} speculative new`}
+            label="New findings"
+            value={week.cost.findings}
+            footer={`${week.cost.confirmed} confirmed, ${week.cost.findings - week.cost.confirmed} speculative`}
           />
         </div>
         <SubscriptionCard rate={ov.rate_limit} />
@@ -163,6 +175,7 @@ export function UsagePage() {
           </Table>
         </CardContent>
       </Card>
+      <CoverageSummary ov={ov} />
     </Page>
   );
 }

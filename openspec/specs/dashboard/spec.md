@@ -41,16 +41,80 @@ The dashboard SHALL follow whichever run holds `state/.lock`, whoever started it
 - **THEN** the dashboard marks the run as no longer active
 - **AND** the pages refresh when the state database or repos.yaml change
 
+### Requirement: Navigation
+The dashboard SHALL group its pages in the sidebar as Work (Overview, Findings, Repositories) and Operate (Runs, Insights), mark Findings with its Triage count and Runs with a live marker while a run holds the lock, and show breadcrumbs in the header for nested pages. A page that fails to load SHALL show its error inside the shell with the sidebar still usable.
+
+#### Scenario: Triage badge
+- **WHEN** 12 findings are in the Triage queue
+- **THEN** the Findings entry in the sidebar shows 12
+
+#### Scenario: Breadcrumbs on a repository
+- **WHEN** the auditor opens the page of repository `api`
+- **THEN** the header shows Repositories › api, with Repositories linking back to the list
+
+#### Scenario: Page fails to load
+- **WHEN** the overview request fails while the auditor is on Insights
+- **THEN** the error shows in the page area and the sidebar still navigates
+
+### Requirement: Run indicator
+While a run holds the lock, the header SHALL show a run indicator naming the repository being audited, which opens a popover with each repository's progress, the elapsed time, a link to the Runs page and Cancel run.
+
+#### Scenario: Checking a run from Findings
+- **WHEN** a run is in progress and the auditor opens the run indicator on the Findings page
+- **THEN** the popover lists each repository of the run with its stage and offers Cancel run without leaving the page
+
+### Requirement: Command palette
+The dashboard SHALL open a command palette with `Ctrl+K` or `⌘K` from any page. It SHALL let the auditor jump to any page, to any configured repository, and to any finding by title or fingerprint; start New audit; and switch the theme. Typing SHALL narrow the entries, and `Enter` SHALL run the highlighted one.
+
+#### Scenario: Jumping to a finding
+- **WHEN** the auditor presses `Ctrl+K`, types the first 8 characters of a fingerprint and presses `Enter`
+- **THEN** the Findings page opens on the All queue with that finding selected
+
+#### Scenario: Palette while typing
+- **WHEN** the search box of the Findings page has focus and the auditor presses `Ctrl+K`
+- **THEN** the palette opens
+
+### Requirement: Keyboard shortcut list
+The dashboard SHALL open a list of every keyboard shortcut, grouped by page, when the auditor presses `?` outside a field, and from the command palette.
+
+#### Scenario: Asking for shortcuts
+- **WHEN** the auditor presses `?` on the Findings page with no field focused
+- **THEN** a dialog lists the global, Findings list and finding detail shortcuts
+
 ### Requirement: Overview page
-The Overview page SHALL show what needs attention: open findings with the critical and high count, findings new in the last run, speculative candidates awaiting confirmation, overall coverage, the latest run, the subscription windows, a Needs attention list of open critical and high findings with new ones first, a type by severity matrix and a repositories table that link to the findings they count.
+Below the stage pipeline, the Overview page SHALL show:
+- the latest run and the subscription windows;
+- a Needs attention list of open critical and high findings, new ones first;
+- one matrix of open findings by severity, switchable between category and type.
+
+Every count SHALL link to the findings it counts. Coverage per repository SHALL be left to the Repositories page.
 
 #### Scenario: Matrix cell links to findings
-- **WHEN** the auditor clicks a cell of the type by severity matrix
-- **THEN** the Findings page opens filtered to the findings that cell counts
+- **WHEN** the auditor clicks a cell of the matrix shown by type
+- **THEN** the Findings page opens filtered to the open findings that cell counts
+
+#### Scenario: Switching the matrix axis
+- **WHEN** the auditor switches the matrix to Category
+- **THEN** its rows become the five analyzers and its counts still add up to the open findings
 
 #### Scenario: Nothing critical or high
 - **WHEN** no critical or high finding is open
 - **THEN** Needs attention says nothing critical or high is open
+
+### Requirement: Overview stage pipeline
+The Overview page SHALL lead with the four stages of a finding. Each stage SHALL show its counts and one action, and open its Findings queue:
+- Detect: open findings and those new in the last run, with New audit.
+- Validate: the Triage count with its speculative share, with Validate detected findings and Review speculative candidates.
+- Report: the To report count, with Export.
+- Fix: shown as not available yet, with no link.
+
+#### Scenario: Opening a stage
+- **WHEN** the auditor clicks the Validate stage
+- **THEN** the Findings page opens on the Triage queue
+
+#### Scenario: Stage not built yet
+- **WHEN** the Overview is shown
+- **THEN** the Fix stage says it is not available yet and is not a link
 
 ### Requirement: Failed repositories flagged on the Overview
 The Overview page SHALL flag at the top every repository whose last audit failed or was deferred and that has not succeeded since, with the date and the error.
@@ -59,16 +123,31 @@ The Overview page SHALL flag at the top every repository whose last audit failed
 - **WHEN** a repository's last audit failed and no later audit of it succeeded
 - **THEN** the Overview shows it at the top as failed with the date and the error
 
-### Requirement: Findings status tabs
-The Findings page SHALL offer the status tabs Open (default), New, Speculative, Suppressed, Resolved, Refuted, Duplicate, All and Discarded by verifier, each showing how many findings it would hold under the current non-status filters; New lists open findings first reported by the last run.
+### Requirement: Findings work queues
+The Findings page SHALL group findings into the queues Triage (default), To report, Reported, Closed and All, each showing how many findings it would hold under the current filters. Triage holds speculative candidates and open findings at `detected`; To report holds open findings at `validated`; Reported holds open findings at `reported`; Closed holds every other finding. Every finding SHALL fall in exactly one of the first four queues.
+
+#### Scenario: Default queue
+- **WHEN** the auditor opens the Findings page with no query
+- **THEN** the Triage queue is selected and lists the speculative candidates and the open findings at `detected`
+
+#### Scenario: Confirmed finding moves on
+- **WHEN** the auditor confirms an open finding at `detected`
+- **THEN** it leaves Triage and appears in To report, and both queue counts change by one
 
 #### Scenario: Counts follow the filters
 - **WHEN** the auditor filters by one repository
-- **THEN** every tab's count shows only that repository's findings in that status
+- **THEN** every queue's count shows only that repository's findings in that queue
+
+#### Scenario: Closed findings
+- **WHEN** a finding is resolved, suppressed, refuted or duplicate
+- **THEN** it is listed in Closed and in no other queue but All
+
+### Requirement: Discarded candidates reachable from Findings
+The Findings page SHALL offer, beside the queues and apart from them, a link to the candidates the verifier discarded in the last 7 days with its count, listing each with its reason and the specialists that proposed it, narrowed by the repository and search filters.
 
 #### Scenario: Discarded by verifier
-- **WHEN** the auditor opens Discarded by verifier
-- **THEN** the page lists the candidates the verifier rejected in the last 7 days, with their reason and the specialists that proposed them, narrowed by the repository and search filters
+- **WHEN** the auditor follows the Discarded by verifier link
+- **THEN** the page lists the candidates the verifier rejected in the last 7 days, with their reason and proposing specialists, and no queue is selected
 
 ### Requirement: Findings filters and sort
 The Findings page SHALL narrow the list by:
@@ -77,10 +156,12 @@ The Findings page SHALL narrow the list by:
 - type, including findings with no type yet;
 - category;
 - lifecycle stage (`detected`, `validated`, `reported` or `fixed`, several at once);
+- status (`open`, `speculative`, `suppressed`, `resolved`, `refuted` or `duplicate`, several at once);
+- new in the last run;
 - personal data;
 - a text search over title, file, description, fingerprint and repository.
 
-It SHALL sort by severity (default), by newest first seen, or by location.
+Search, repository, severity and sort SHALL be always visible; the other filters SHALL sit in one Filters menu, and every active filter SHALL show as a chip that removes it. It SHALL sort by severity (default), by newest first seen, or by location.
 
 #### Scenario: Search
 - **WHEN** the auditor types part of a fingerprint in the search box
@@ -89,47 +170,134 @@ It SHALL sort by severity (default), by newest first seen, or by location.
 #### Scenario: Stage filter
 - **WHEN** the auditor selects the stages `validated` and `fixed`
 - **THEN** only findings at one of those stages are listed
-- **AND** each status tab counts only findings at those stages
+- **AND** each queue counts only findings at those stages
+
+#### Scenario: Removing a filter from its chip
+- **WHEN** the category filter `security` is active and the auditor removes its chip
+- **THEN** the category filter is cleared and the list and counts widen accordingly
+
+#### Scenario: New in the last run
+- **WHEN** the auditor turns on New in the last run
+- **THEN** only open findings first reported by the last run of their repository are listed
 
 ### Requirement: Findings view state in the URL
-The Findings page MUST keep every filter, the status tab, the sort and the selected finding in the URL query (`status`, `repo`, `severity`, `category`, `kind`, `stage`, `pd`, `q`, `sort`, `id`, `view`), so a view can be bookmarked, shared with another auditor and walked back with the browser's back button. A `stage` value that is not a known stage MUST be ignored.
+The Findings page MUST keep the queue, every filter, the sort, the selected finding and its detail tab in the URL query (`queue`, `status`, `new`, `repo`, `severity`, `category`, `kind`, `stage`, `pd`, `q`, `sort`, `id`, `tab`, `view`), so a view can be bookmarked, shared and walked back with the back button. Values it does not know MUST be ignored. A `status` with no `queue` MUST open the All queue filtered to that status; `status=new` MUST turn on New in the last run; `status=all` MUST open All.
 
 #### Scenario: Shared link
 - **WHEN** an auditor opens a Findings URL another auditor sent
-- **THEN** the same tab, filters, sort and selected finding are shown
+- **THEN** the same queue, filters, sort, selected finding and detail tab are shown
 
 #### Scenario: Unknown stage in the URL
 - **WHEN** a Findings URL has `stage=validated,shipped`
 - **THEN** the stage filter holds only `validated`
 
+#### Scenario: Link from before the queues
+- **WHEN** an auditor opens `/findings?status=resolved&repo=api`
+- **THEN** the All queue is selected with the status filter `resolved` and the repository `api`
+
+#### Scenario: Old New tab link
+- **WHEN** an auditor opens `/findings?status=new`
+- **THEN** the All queue is selected with New in the last run on, listing the same findings the New tab listed
+
+### Requirement: Validate and review from Triage
+The Triage queue SHALL offer Validate detected findings when its scope holds open findings at `detected` in repositories with verification on, and Review speculative candidates when it holds speculative candidates. Each SHALL say how many findings a pass would try, in which repositories, and that it spends subscription usage, then start `run` as New audit does. Both SHALL be disabled while a run holds the lock.
+
+#### Scenario: Validating one repository's triage
+- **WHEN** Triage is filtered to repository `api`, which has verification on and 4 open findings at `detected`, and the auditor confirms Validate detected findings
+- **THEN** the CLI runs detached as `run --mode validate --repo api`
+
+#### Scenario: Reviewing speculative candidates
+- **WHEN** Triage holds speculative candidates of two repositories and the auditor confirms Review speculative candidates
+- **THEN** the CLI runs detached as `run --mode speculative` with both repositories
+
+#### Scenario: Run in progress
+- **WHEN** a run holds the lock
+- **THEN** both actions are disabled and say a run is in progress
+
+### Requirement: Bulk actions on findings
+The Findings list SHALL let the auditor select findings by checkbox, by `Space` on the selected row and by shift-click for a range. With a selection, a bar SHALL offer Export selection, Copy for tickets and Not a bug. Not a bug SHALL apply one verdict and reason through the existing decide or suppress action, once per finding, offering a verdict only when every selected finding allows it, and SHALL report which succeeded and which were refused.
+
+#### Scenario: Refuting several candidates
+- **WHEN** the auditor selects three speculative candidates and refutes them with one reason
+- **THEN** each is refuted with that reason and recorded in its history, and the bar reports 3 refuted
+
+#### Scenario: Mixed selection
+- **WHEN** the selection holds a speculative candidate and an open finding an auditor confirmed
+- **THEN** Not a bug offers neither Refute nor Suppress and says why
+
+#### Scenario: Partial failure
+- **WHEN** one of four suppressions is refused because the fingerprint is already suppressed
+- **THEN** the other three are suppressed and the result names the refused one with its reason
+
+#### Scenario: Selection and filters
+- **WHEN** the auditor changes the queue or a filter
+- **THEN** findings no longer listed leave the selection
+
 ### Requirement: Finding detail
-The selected finding SHALL open beside the list and show:
-- its severity, category, status, file and line, type and personal-data mark;
-- its lifecycle stage as a four-step timeline (detected, validated, reported, fixed) with the current step marked and the date each reached step was entered;
-- the scenario, reproduction steps, why it is a bug, the suggested fix and the anchored code;
-- its confidence, specialists, first and last seen, commit and fingerprint;
-- any unconfirmed point, suppression reason, resolution or auditor decision;
-- its validation attempts, each with its date, outcome and reason;
-- its history of statuses, each linked to the run that set it.
+The selected finding SHALL open beside the list and show in its header its severity, category, status, title, file and line, type and personal-data mark, and a compact progress bar of its lifecycle stage, then any unconfirmed point, suppression reason, resolution or auditor decision. Its tabs SHALL show:
+- Overview: the scenario, reproduction steps, why it is a bug, the suggested fix and the anchored code;
+- Evidence: its validation attempts with date, outcome and reason, the reproduction test, the last speculative review, its confidence and specialists;
+- History: its stage as a four-step timeline (detected, validated, reported, fixed) with the current step and the date each reached step was entered, its status history with each status linked to the run that set it, first and last seen, commit and fingerprint.
 
 #### Scenario: Speculative candidate selected
 - **WHEN** the auditor selects a speculative candidate
-- **THEN** the detail shows what the verifier could not confirm alongside the evidence
+- **THEN** the header shows what the verifier could not confirm and the Evidence tab shows the evidence
 
 #### Scenario: History
-- **WHEN** a finding is selected
-- **THEN** its history lists every status it has had, each linked to the run that set it
+- **WHEN** a finding is selected and the auditor opens History
+- **THEN** it lists every status the finding has had, each linked to the run that set it
 
 #### Scenario: Stage timeline
-- **WHEN** the auditor selects a finding that was validated by an auditor and later resolved
+- **WHEN** the auditor opens History for a finding that was validated by an auditor and later resolved
 - **THEN** the timeline marks `fixed` as current, shows the dates it entered `detected`, `validated` and `fixed`, and leaves `reported` as not reached
 
 #### Scenario: Unsuccessful attempts
-- **WHEN** the auditor selects an open finding at `detected` that two validation passes could not reproduce
-- **THEN** the detail lists both attempts with their outcomes and reasons, and says validation passes no longer try it
+- **WHEN** the auditor opens Evidence for an open finding at `detected` that two validation passes could not reproduce
+- **THEN** it lists both attempts with their outcomes and reasons, and says validation passes no longer try it
+
+### Requirement: Next step actions
+The finding detail SHALL lead with the actions that move the finding forward from its queue: Confirm and Not a bug in Triage, Copy for a ticket in To report and Reported, and Unsuppress for a suppressed finding in Closed, each shown only where the existing rules allow it. Open in VS Code SHALL stay visible for every finding, and copying the location or the fingerprint SHALL be offered from a More menu.
+
+#### Scenario: Speculative candidate
+- **WHEN** the auditor selects an undecided speculative candidate
+- **THEN** the next step offers Confirm and Not a bug
+
+#### Scenario: Validated finding
+- **WHEN** the auditor selects an open finding at `validated`
+- **THEN** the next step offers Copy for a ticket and Not a bug, and does not offer Confirm
+
+#### Scenario: Resolved finding
+- **WHEN** the auditor selects a resolved finding
+- **THEN** no next step action is offered and Open in VS Code is still available
+
+### Requirement: Not a bug dialog
+The finding detail SHALL offer one Not a bug action whose dialog lets the auditor choose between Refute, recorded in the database as an auditor decision, and Suppress, written to repos.yaml for every later run, each available only where the decide and suppress rules allow it, with one reason of 3 to 300 characters for either. The dialog SHALL say which choice holds across runs and how each is undone.
+
+#### Scenario: Open finding with no decision
+- **WHEN** the auditor opens Not a bug on an undecided open finding
+- **THEN** both Refute and Suppress are offered, with Refute selected
+
+#### Scenario: Speculative candidate
+- **WHEN** the auditor opens Not a bug on a speculative candidate
+- **THEN** only Refute is offered
+
+#### Scenario: Confirmed finding
+- **WHEN** the auditor opens Not a bug on an open finding an auditor already confirmed
+- **THEN** only Suppress is offered
+
+#### Scenario: Reason too short
+- **WHEN** the reason has fewer than 3 characters
+- **THEN** the dialog does not submit and says why
+
+### Requirement: Finding detail tabs
+The finding detail SHALL keep its header, decision, suppression, resolution and duplicate notices above three tabs: Overview, Evidence and History. The selected tab SHALL stay selected while the auditor moves to another finding.
+
+#### Scenario: Moving through the list on Evidence
+- **WHEN** the Evidence tab is selected and the auditor presses `J`
+- **THEN** the next finding opens on its Evidence tab
 
 ### Requirement: Keyboard navigation
-The Findings page SHALL move to the next finding with `J` or Down arrow and the previous with `K` or Up arrow, focus the search box with `/`, and close the selected finding with `Esc`, ignoring these keys while typing in a field or while a dialog is open.
+The Findings page SHALL move to the next finding with `J` or Down arrow and the previous with `K` or Up arrow, toggle the selected finding in the bulk selection with `Space`, focus the search box with `/`, close the selected finding with `Esc`, open Confirm with `C`, open Not a bug with `X` and open the finding in VS Code with `O`. An action key SHALL do nothing when the action is not offered for the selected finding. Every key SHALL be ignored while typing in a field, while a dialog is open or with a modifier key held.
 
 #### Scenario: Stepping through the list
 - **WHEN** the auditor presses `J` with no field focused
@@ -138,6 +306,14 @@ The Findings page SHALL move to the next finding with `J` or Down arrow and the 
 #### Scenario: Typing in search
 - **WHEN** the search box has focus and the auditor types `j`
 - **THEN** the letter goes into the search and the selection does not move
+
+#### Scenario: Not a bug from the keyboard
+- **WHEN** an open finding is selected and the auditor presses `X`
+- **THEN** the Not a bug dialog opens for it
+
+#### Scenario: Action not offered
+- **WHEN** a resolved finding is selected and the auditor presses `C`
+- **THEN** nothing happens
 
 ### Requirement: Copy for a ticket
 The finding detail SHALL offer Copy for a ticket, which copies the finding as Markdown to the clipboard.
@@ -163,7 +339,7 @@ The finding detail SHALL offer Open in VS Code, which opens the finding's file a
 - **AND** when VS Code is not found the request is refused with status 501
 
 ### Requirement: Suppress a finding
-The finding detail SHALL offer Suppress for open findings, requiring a reason of 3 to 300 characters (control characters and repeated whitespace collapsed to one line), which adds a `fingerprint` and `reason` entry under the repository's `suppressed` list in repos.yaml.
+The finding detail SHALL offer Suppress for open findings through the Not a bug dialog, requiring a reason of 3 to 300 characters (control characters and repeated whitespace collapsed to one line), which adds a `fingerprint` and `reason` entry under the repository's `suppressed` list in repos.yaml.
 
 #### Scenario: Suppressing
 - **WHEN** the auditor suppresses an open finding with a valid reason
@@ -231,14 +407,33 @@ The dashboard MUST render every text that comes from a finding or a repository a
 - **THEN** the markup is displayed literally and nothing is executed
 
 ### Requirement: Repositories page
-The Repositories page SHALL show coverage across repositories and, per repository, open findings by severity, new, speculative and suppressed counts, the last audit and its health, the full runs still needed at the pace of the last five full runs, and their cost in 5-hour and weekly windows, with a Count audits since control restricting coverage to a period.
+The Repositories page SHALL list each repository with:
+- its Triage and To report counts and its open findings by severity, each linking to those findings;
+- its coverage and the full runs still needed at the pace of the last five full runs;
+- its last audit and health.
+
+A Count audits since control SHALL restrict coverage to a period. A row menu SHALL offer Audit this repository and, where verification is on and findings are at `detected`, Validate detected findings.
 
 #### Scenario: Count audits since
 - **WHEN** the auditor sets Count audits since to the start of a sweep
 - **THEN** coverage counts only the audits made since that instant
 
+#### Scenario: Auditing from the list
+- **WHEN** the auditor picks Audit this repository in the row of `api`
+- **THEN** New audit opens with only `api` ticked
+
+#### Scenario: Triage count
+- **WHEN** the auditor clicks the Triage count of `api`
+- **THEN** the Findings page opens on the Triage queue filtered to `api`
+
 ### Requirement: Repository page
-Each repository SHALL have its own page with its type by severity matrix, configuration, coverage per analyzer and recent Claude runs, and a notice that verification is off whenever the verifier cannot run `test_command` there: when the repository has none, or when the platform has no Claude Code sandbox and the repository does not set `test_command_unsandboxed: true`.
+Each repository SHALL have its own page that leads with its stage pipeline, Audit this repository, Validate detected findings and Review findings. Its tabs SHALL be:
+- Findings: one matrix switchable between category and type;
+- Coverage: per analyzer;
+- Runs: recent Claude runs;
+- Configuration.
+
+The page SHALL say that verification is off when the verifier cannot run `test_command`: the repository has none, or the platform has no Claude Code sandbox and the repository does not set `test_command_unsandboxed: true`.
 
 #### Scenario: No test_command
 - **WHEN** a repository has no `test_command`
@@ -252,37 +447,69 @@ Each repository SHALL have its own page with its type by severity matrix, config
 - **WHEN** the auditor opens the page of a name not in repos.yaml
 - **THEN** the page says there is no repository with that name
 
+#### Scenario: Tab in the URL
+- **WHEN** the auditor opens the Coverage tab and reloads the page
+- **THEN** the Coverage tab is still selected
+
 ### Requirement: Runs page
-The Runs page SHALL show the run in progress, or any past run replayed from its event log, with each repository's progress through its stages, the subagents grouped by type with their tokens and tool calls, an activity feed filterable to warnings and errors, and the tool calls blocked by policy.
+The Runs page SHALL list the run in progress and past runs beside the selected run, each with its date, mode, status and duration. The selected run SHALL show, live or replayed from its event log:
+- each repository's progress through its stages;
+- the subagents grouped by type, with their tokens and tool calls;
+- an activity feed filterable to warnings and errors;
+- the tool calls blocked by policy.
+
+The selected run SHALL be kept in the URL.
 
 #### Scenario: Replaying a past run
-- **WHEN** the auditor picks a past run
-- **THEN** its event log is replayed into the same panels
+- **WHEN** the auditor picks a past run from the list
+- **THEN** its event log is replayed into the same panels and the URL names that run
 
 #### Scenario: Unknown run id
 - **WHEN** a run id that is malformed or has no event log is requested
 - **THEN** the dashboard answers with status 404
 
-### Requirement: Usage page
-The Usage page SHALL show one row per Claude run with its cost, filterable by repository, totals for the last 7 days with the cost per finding and per confirmed finding, the yield per analyzer, and precision per analyzer, specialists model and prompt version, as defined by usage-metrics.
+### Requirement: Insights page
+The Insights page at `/insights` SHALL show:
+- a headline of the cost per finding and per confirmed finding over the last 7 days;
+- one row per Claude run with its cost, filterable by repository;
+- 7-day totals;
+- the yield per analyzer;
+- precision per analyzer, specialists model and prompt version, as defined by usage-metrics;
+- coverage across repositories with a Count audits since control.
+
+`/usage` SHALL redirect to `/insights`.
 
 #### Scenario: Filter by repository
 - **WHEN** the auditor picks one repository
-- **THEN** the rows and totals cover only that repository's Claude runs
+- **THEN** the rows, totals and headline cover only that repository's Claude runs
+
+#### Scenario: Old link
+- **WHEN** an auditor opens `/usage`
+- **THEN** the Insights page opens at `/insights`
 
 ### Requirement: New audit
-The Runs page SHALL offer New audit, which summarises the run and then starts the `run` command as a detached process with the ticked repositories (none means all), mode incremental, full, speculative or validate, an optional cap from 1 to 150 on files, candidates or findings, an optional analyzer subset outside validate (none means each repository's configured ones) and, in full mode only, an optional sweep with a session limit from 10 to 99 percent (default 90).
+The dashboard SHALL offer New audit on the Runs page, the Overview, the Repository page, a Repositories row and the command palette, preset to its context. It summarises the run, then starts `run` detached with the ticked repositories (none means all) and one of these modes:
+- Changes since the last audit (incremental);
+- Whole repository (full);
+- Settle speculative candidates (speculative);
+- Reproduce detected findings with a test (validate).
+
+It takes an optional cap from 1 to 150, analyzers outside validate, and in full mode a sweep with a session limit from 10 to 99 percent (default 90).
 
 #### Scenario: Starting an audit
 - **WHEN** the auditor starts a full audit of one repository with the sweep ticked
 - **THEN** the CLI runs detached as `run --mode full --repo <name> --until-covered --session-limit 90`
 
+#### Scenario: Preset from a repository
+- **WHEN** the auditor opens New audit from the page of repository `api`
+- **THEN** only `api` is ticked and the mode is Changes since the last audit
+
 #### Scenario: Starting a validation pass
-- **WHEN** the auditor picks Validate, ticks one repository with verification on and sets 5 findings
+- **WHEN** the auditor picks Reproduce detected findings with a test, ticks one repository with verification on and sets 5 findings
 - **THEN** the CLI runs detached as `run --mode validate --repo <name> --max-files 5`
 
 #### Scenario: Repository with verification off
-- **WHEN** the auditor picks Validate
+- **WHEN** the auditor picks Reproduce detected findings with a test
 - **THEN** each repository with verification off cannot be ticked and says whether it lacks a `test_command` or a sandbox
 
 #### Scenario: Refused while locked
@@ -334,7 +561,7 @@ The dashboard SHALL serve a finding's stage history, oldest first, as a read-onl
 - **THEN** it receives two entries in order, the first with the source `initial` and the second with the source `reproduced`
 
 ### Requirement: Decide a finding
-The finding detail SHALL offer Confirm and Refute for speculative candidates, Confirm for open findings at the `detected` stage and Refute for every open finding, each requiring a reason of 3 to 300 characters, recorded in the database with the auditor's account name and time, and SHALL offer Undo this decision on a decided finding. The actions SHALL be hidden on a finding that already has a decision, and their wording SHALL name a candidate or a finding according to its status.
+The finding detail SHALL offer Confirm for speculative candidates and for open findings at `detected`, and Refute, through the Not a bug dialog, for speculative candidates and every open finding. Each requires a reason of 3 to 300 characters and is recorded in the database with the auditor's account name and time. It SHALL offer Undo this decision on a decided finding. Both actions SHALL be withheld on a finding that already has a decision, and their wording SHALL name a candidate or a finding according to its status.
 
 #### Scenario: Confirming
 - **WHEN** the auditor confirms a speculative candidate with a reason
@@ -342,15 +569,15 @@ The finding detail SHALL offer Confirm and Refute for speculative candidates, Co
 
 #### Scenario: Refuting an open finding
 - **WHEN** the auditor refutes an open finding with a reason
-- **THEN** it moves to the Refuted tab showing who refuted it, when and why, and offers Undo this decision
+- **THEN** it moves to the Closed queue with the status refuted, showing who refuted it, when and why, and offers Undo this decision
 
 #### Scenario: Confirming an open finding
 - **WHEN** the auditor confirms an open finding at `detected`
-- **THEN** it stays in the Open tab, its stage timeline shows `validated`, and the detail shows who confirmed it, when and why
+- **THEN** it stays open and moves to the To report queue, its stage shows `validated`, and the detail shows who confirmed it, when and why
 
 #### Scenario: Reproduced open finding
 - **WHEN** the auditor selects an open finding at `validated`
-- **THEN** the detail offers Refute and does not offer Confirm
+- **THEN** the detail offers Refute through Not a bug and does not offer Confirm
 
 #### Scenario: Deciding a non-speculative finding
 - **WHEN** a decision is requested for a finding that is neither speculative nor open, or that already has a decision
@@ -358,7 +585,7 @@ The finding detail SHALL offer Confirm and Refute for speculative candidates, Co
 - **AND** a decision for an unknown finding, or an undo with no decision, is refused with status 404
 
 ### Requirement: Validate detected findings from the Repository page
-The Repository page SHALL offer Validate detected findings when the repository's verification is on and it has open findings at `detected`. The button SHALL say how many findings a pass would try, then start `run --mode validate --repo <name>` as New audit does, and SHALL be disabled while a run holds the lock.
+The Repository page and the repository's row on the Repositories page SHALL offer Validate detected findings when the repository's verification is on and it has open findings at `detected`. The action SHALL say how many findings a pass would try and that it spends subscription usage, then start `run --mode validate --repo <name>` as New audit does, and SHALL be disabled while a run holds the lock.
 
 #### Scenario: Starting from the repository
 - **WHEN** the auditor confirms Validate detected findings on a repository with 4 open findings at `detected`
@@ -366,7 +593,7 @@ The Repository page SHALL offer Validate detected findings when the repository's
 
 #### Scenario: Verification off
 - **WHEN** the repository has no `test_command`, or no sandbox and no opt-in
-- **THEN** the button is not shown and the Verification is off notice explains why
+- **THEN** the action is not shown and the Verification is off notice explains why
 
 ### Requirement: Validation outcomes on the Runs page
 The Runs page SHALL show a validation pass with the mode `validate` and, for each repository, how many findings it tried, reproduced, did not reproduce and found not testable, or why it was skipped or deferred.
@@ -381,4 +608,3 @@ The dashboard SHALL serve a finding's validation attempts, oldest first, each wi
 #### Scenario: Attempts requested
 - **WHEN** the dashboard requests the attempts of a finding tried once without success and then reproduced
 - **THEN** it receives two entries in order, the first `not_reproduced` with its reason and the second `reproduced`
-

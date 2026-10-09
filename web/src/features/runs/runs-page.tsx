@@ -1,25 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
-import { History } from 'lucide-react';
 import { useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router';
-import { useLive } from '@/app/live';
+import { useParams } from 'react-router';
+import { useRun } from '@/app/live';
 import { Page, PageHeader } from '@/components/page';
 import { ErrorAlert, LoadingPage } from '@/components/query-state';
 import { SubscriptionCard } from '@/components/subscription-card';
 import { Elapsed } from '@/components/time';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useOverview } from '@/hooks/use-overview';
-import { api } from '@/lib/api';
+import { useRunInProgress } from '@/hooks/use-run-in-progress';
+import { modeShort } from '@/lib/domain';
 import { formatDateTime, runLabel } from '@/lib/format';
 import { applyEvents, emptyLive, exitMeaning, type LiveState } from '@/lib/live';
+import { runEventsQuery } from '@/lib/queries';
+import { runHistory } from '@/lib/selectors';
 import { CancelRun } from './cancel-run';
-import { ActivityPanel, AgentsPanel, DenialsPanel, RepositoriesPanel } from './run-panels';
+import { NewAuditButton } from './new-audit';
+import { ActivityPanel } from './panels/activity-panel';
+import { AgentsPanel } from './panels/agents-panel';
+import { DenialsPanel } from './panels/denials-panel';
+import { RepositoriesPanel } from './panels/repositories-panel';
+import { RunHistoryList } from './run-history-list';
 import { RunStatusBadge } from './run-status-badge';
-import { StartAuditDialog } from './start-audit-dialog';
-
-const LIVE = '__live';
 
 function RunHeader({ live }: { live: LiveState }) {
   return (
@@ -55,77 +58,72 @@ function RunHeader({ live }: { live: LiveState }) {
   );
 }
 
+function RunView({ live, showSubscription, rate }: { live: LiveState; showSubscription: boolean; rate: Parameters<typeof SubscriptionCard>[0]['rate'] }) {
+  return (
+    <>
+      <RunHeader live={live} />
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="flex flex-col gap-4 xl:col-span-2">
+          <RepositoriesPanel live={live} />
+          <AgentsPanel live={live} />
+        </div>
+        <div className="flex flex-col gap-4">
+          {showSubscription ? <SubscriptionCard rate={rate} /> : null}
+          <ActivityPanel live={live} />
+        </div>
+      </div>
+      <DenialsPanel live={live} />
+    </>
+  );
+}
+
+// A past run, replayed from its event log once it has loaded.
+function PastRun({ runId }: { runId: string }) {
+  const { data, isLoading, error } = useQuery(runEventsQuery(runId));
+  const live = useMemo(() => (data ? applyEvents(emptyLive(runId), data) : null), [runId, data]);
+  if (isLoading) return <LoadingPage />;
+  if (error) return <ErrorAlert title="Could not load that run" error={error} />;
+  return live ? <RunView live={live} showSubscription={false} rate={null} /> : null;
+}
+
 export function RunsPage() {
   const { runId } = useParams();
-  const navigate = useNavigate();
-  const { data: ov, isLoading, error } = useOverview();
-  const { live: current } = useLive();
-  const past = useQuery({ queryKey: ['run-events', runId], queryFn: () => api.runEvents(runId as string), enabled: !!runId });
-  const viewed = useMemo(() => (runId && past.data ? applyEvents(emptyLive(runId), past.data) : null), [runId, past.data]);
-  const live = runId ? viewed : current;
-  const running = current.active || !!ov?.active;
-
-  if (isLoading) {
-    return (
-      <Page>
-        <LoadingPage />
-      </Page>
-    );
-  }
-  if (error || !ov) {
-    return (
-      <Page>
-        <ErrorAlert error={error} />
-      </Page>
-    );
-  }
+  const ov = useOverview();
+  const current = useRun();
+  const running = useRunInProgress();
+  const history = useMemo(() => runHistory(ov), [ov]);
+  const title = runId ? runLabel(runId) : current.runId ? runLabel(current.runId) : null;
 
   return (
     <Page>
       <PageHeader
         title="Runs"
-        description={runId ? 'A recorded run, replayed from its event log.' : 'The run in progress, or the latest one.'}
+        description={
+          runId
+            ? `${title}, replayed from its event log.`
+            : current.active
+              ? `${current.mode ? modeShort(current.mode) : 'A run'} in progress since ${formatDateTime(current.startedAt)}.`
+              : 'The latest run, and every run on record.'
+        }
         actions={
           <>
-            <Select value={runId ?? LIVE} onValueChange={(v) => navigate(v === LIVE ? '/runs' : `/runs/${encodeURIComponent(v)}`)}>
-              <SelectTrigger className="w-64" aria-label="Run to show">
-                <History />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={LIVE}>Current or latest run</SelectItem>
-                {ov.runs.map((r) => (
-                  <SelectItem key={r.run_id} value={r.run_id}>
-                    {runLabel(r.run_id)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             {running && !runId ? <CancelRun runId={current.runId} /> : null}
-            <StartAuditDialog repos={ov.repos} disabled={running} />
+            <NewAuditButton />
           </>
         }
       />
-
-      {past.isLoading ? <LoadingPage /> : null}
-      {past.error ? <ErrorAlert title="Could not load that run" error={past.error} /> : null}
-
-      {live ? (
-        <>
-          <RunHeader live={live} />
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="flex flex-col gap-4 lg:col-span-2">
-              <RepositoriesPanel live={live} />
-              <AgentsPanel live={live} />
-            </div>
-            <div className="flex flex-col gap-4">
-              {!runId ? <SubscriptionCard rate={live.rateLimit ?? ov.rate_limit} /> : null}
-              <ActivityPanel live={live} />
-            </div>
-          </div>
-          <DenialsPanel live={live} />
-        </>
-      ) : null}
+      <div className="grid gap-6 lg:grid-cols-4">
+        <RunHistoryList runs={history} selected={runId ?? null} liveRunId={current.runId} active={current.active} />
+        <div className="flex min-w-0 flex-col gap-4 lg:col-span-3">
+          {runId ? (
+            <PastRun runId={runId} />
+          ) : current.runId ? (
+            <RunView live={current} showSubscription rate={current.rateLimit ?? ov.rate_limit} />
+          ) : (
+            <p className="text-sm text-muted-foreground">No run recorded yet. Start one with New audit.</p>
+          )}
+        </div>
+      </div>
     </Page>
   );
 }

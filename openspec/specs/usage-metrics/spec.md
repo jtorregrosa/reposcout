@@ -1,7 +1,7 @@
 # usage-metrics Specification
 
 ## Purpose
-Defines what RepoScout records about each Claude run and what it derives from it: the usage row per run (with the prompt version defined by the detection capability), usage-limit detection, precision of what people kept, yield and cost per analyzer, cost per finding, and the subscription budget estimate that sweeps and backfills consult. How the Usage page lays these out belongs to the dashboard capability, and when a sweep stops belongs to audit-run.
+Defines what RepoScout records about each Claude run and what it derives from it: the usage row per run (with the prompt version defined by the detection capability), usage-limit detection, precision of what people kept, yield and cost per analyzer, cost per finding, and the subscription budget estimate that sweeps and backfills consult. How the Insights page lays these out belongs to the dashboard capability, and when a sweep stops belongs to audit-run.
 ## Requirements
 ### Requirement: Usage recorded for every Claude run
 RepoScout SHALL record one usage row in `state/reposcout.db` for every audit's Claude session that ran, whether it succeeded, failed, timed out or hit the usage limit, with date and time, repository, mode, analyzers, number of files, whether it succeeded, the terminal reason, the run id, the prompt version and the specialists model.
@@ -140,7 +140,7 @@ Before each sweep pass, backfill batch or validation session, RepoScout SHALL ta
 ### Requirement: Usage of a validation session
 RepoScout SHALL record a validation session's usage row with the mode `validate`, empty analyzers and the number of findings it was given as its files; the row SHALL count in the 7-day totals and in cost per finding like any other run, and MUST NOT change precision.
 
-#### Scenario: Validation session on the Usage page
+#### Scenario: Validation session on the Insights page
 - **WHEN** a validation session tried 8 findings
-- **THEN** the Usage page shows its row with the mode `validate`, 8 files and its cost
+- **THEN** the Insights page shows its row with the mode `validate`, 8 files and its cost
 

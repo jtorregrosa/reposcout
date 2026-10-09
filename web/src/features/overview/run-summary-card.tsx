@@ -48,7 +48,7 @@ export function RunSummaryCard({ live }: { live: LiveState }) {
         ) : null}
         <Button asChild variant="outline" size="sm" className="w-full">
           <Link to="/runs">
-            {live.active ? 'Follow the run' : 'Start or review runs'}
+            {live.active ? 'Follow the run' : 'Review runs'}
             <ArrowRight />
           </Link>
         </Button>
