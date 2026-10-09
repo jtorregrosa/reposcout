@@ -1,4 +1,3 @@
-import { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { triageFixture } from '@/test/fixtures';
@@ -19,7 +18,7 @@ describe('the app shell', () => {
     const crumbs = await screen.findByRole('navigation', { name: 'breadcrumb' });
     expect(within(crumbs).getByText('api')).toBeInTheDocument();
     await user.click(within(crumbs).getByRole('link', { name: 'Repositories' }));
-    expect(router.state.location.pathname).toBe('/repositories');
+    await waitFor(() => expect(router.state.location.pathname).toBe('/repositories'));
   });
 
   it('shows a page that fails inside the shell, with the sidebar still working', async () => {
@@ -34,8 +33,7 @@ describe('the app shell', () => {
     await router.navigate('/runs');
     expect(await screen.findByText('This page could not be shown')).toBeInTheDocument();
     await user.click(screen.getByRole('link', { name: 'Insights' }));
-    expect(router.state.location.pathname).toBe('/insights');
-    expect(queryClient).toBeInstanceOf(QueryClient);
+    await waitFor(() => expect(router.state.location.pathname).toBe('/insights'));
   });
 
   it('jumps to a finding by fingerprint from the command palette', async () => {

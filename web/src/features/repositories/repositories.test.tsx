@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { overview, repo, triageFixture } from '@/test/fixtures';
 import { renderApp, searchOf, stubServer } from '@/test/render';
@@ -59,6 +59,5 @@ describe('a repository page', () => {
     first.unmount();
     renderApp(url, { overview: ov });
     expect(await screen.findByRole('tab', { name: 'Coverage' })).toHaveAttribute('aria-selected', 'true');
-    expect(render).toBeTypeOf('function');
   });
 });

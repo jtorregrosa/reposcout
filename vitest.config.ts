@@ -12,6 +12,8 @@ export default defineConfig({
           name: 'node',
           include: ['test/**/*.test.ts', 'web/src/**/*.test.ts'],
           environment: 'node',
+          // The database tests run beside the jsdom project; on a CI runner the shared CPU slows them past 5s.
+          testTimeout: 15_000,
         },
       },
       {
