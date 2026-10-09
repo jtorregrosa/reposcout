@@ -1,0 +1,41 @@
+# Lint, typecheck, test and build RepoScout itself. It never runs an audit, so it needs no secrets.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: verify (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # No `version` input: the action reads it from package.json's packageManager (pnpm@11.17.0), so they never drift.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.x
+          cache: pnpm
+
+      # better-sqlite3 needs no build (allowBuilds: false): its package ships prebuilt binaries for linux-x64 and win32-x64.
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm verify

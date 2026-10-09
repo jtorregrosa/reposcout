@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "strict": false,
+    "noUncheckedIndexedAccess": false,
+    "allowJs": true,
+    "checkJs": false,
+    "paths": {
+      "@/*": ["../web/src/*"]
+    },
+    "module": "ESNext",
+    "moduleResolution": "bundler"
+  },
+  "include": [".", "../web/src/**/*.test.ts"]
+}

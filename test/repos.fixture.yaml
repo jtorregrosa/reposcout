@@ -1,0 +1,32 @@
+# Fixture for the dashboard action tests, kept apart from the live repos.yaml.
+
+defaults:
+  organization: org
+  # Read-only PAT.
+  pat_env: REPOSCOUT_ADO_PAT
+  claude:
+    models:
+      orchestrator: sonnet
+      specialists: sonnet
+      verifier: opus
+  excluded_paths:
+    - "**/*.md"
+
+repos:
+  - name: demo
+    project: p
+    repo: demo
+    branch: main
+    focus_areas:
+      - authentication and token handling
+    # Reviewed false positives: never reported again while the anchored code is unchanged.
+    suppressed: []
+    #  - fingerprint: 0123456789abcdef0123456789abcdef
+    #    reason: value comes from trusted configuration, never from user input
+    # test_command: dotnet test --no-restore
+
+  - name: other
+    provider: github
+    organization: owner
+    repo: other
+    suppressed: []

@@ -1,0 +1,48 @@
+# Ground truth for the reports-svc case: a small Express-style reporting service in TypeScript, seeded with
+# performance defects only. Its clean files hold the bounded look-alikes a calibrated auditor must leave alone:
+# a read at startup, a loop over three fixed regions, a batched nightly delete and an aggregate done in SQL.
+# lines is an inclusive range, or a list of ranges; a finding matches within 3 lines of one.
+case: reports-svc
+description: Express-style reporting service in TypeScript (invoices, activity, exports, webhooks, login), performance defects only.
+clean_files:
+  - src/startup.ts
+  - src/routes/health.ts
+  - src/jobs/cleanup.ts
+  - src/routes/stats.ts
+bugs:
+  - id: RS-01
+    file: src/routes/invoices.ts
+    lines: [29, 31]
+    category: performance
+    severity: high
+    description: One customers query per invoice on the accounts team's main list (N+1); the page of 50 makes it 51 queries per request, not a bound that excuses it.
+  - id: RS-02
+    file: src/routes/activity.ts
+    lines: [25, 25]
+    category: performance
+    severity: medium
+    description: The activity page reads every audit event a user ever produced, with no limit, from a table that gains a row per request and is never pruned.
+  - id: RS-03
+    file: src/jobs/export.ts
+    lines: [26, 27]
+    category: performance
+    severity: medium
+    description: customers.find inside the loop over the month's orders scans all 200,000 customers per order (quadratic); a Map or a join would do.
+  - id: RS-04
+    file: src/services/notify.ts
+    lines: [13, 21]
+    category: performance
+    severity: high
+    description: One webhook call per subscriber, awaited in turn, inside the price-change request; thousands of subscribers with a 5 s timeout each hold the request for minutes.
+  - id: RS-05
+    file: src/routes/downloads.ts
+    lines: [22, 25]
+    category: performance
+    severity: medium
+    description: Each download reads the whole export, several hundred megabytes, into memory before sending it, instead of streaming it.
+  - id: RS-06
+    file: src/routes/login.ts
+    lines: [25, 25]
+    category: performance
+    severity: high
+    description: pbkdf2Sync with 600,000 iterations blocks the event loop on every login, stalling every other request the process serves.

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "WebFetch",
+      "WebSearch",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./.claude-home/.claude.json)",
+      "Read(./.claude-home/.credentials.json)",
+      "Read(./.claude-home/session-env/**)",
+      "Read(./.claude-home/sessions/**)",
+      "Read(./.claude-home/backups/**)",
+      "Bash(git -C workspace/* push*)",
+      "Bash(git -C workspace/* commit*)"
+    ]
+  }
+}

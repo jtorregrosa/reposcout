@@ -1,0 +1,45 @@
+# Ground truth for the billing-svc case: a small ASP.NET Core and EF Core service in C#.
+# lines is an inclusive range, or a list of ranges; a finding matches within 3 lines of one.
+case: billing-svc
+description: ASP.NET Core invoice API with EF Core, a cached balance and an e-mail sender, in C#.
+clean_files:
+  - src/Models/Invoice.cs
+  - src/Utils/Money.cs
+  - src/Data/BillingContext.cs
+bugs:
+  - id: BS-01
+    file: src/Controllers/InvoiceController.cs
+    lines: [28, 32]
+    category: security
+    severity: high
+    description: GET api/invoices/{id} returns any customer's invoice; the owner is never checked (IDOR).
+  - id: BS-02
+    file: src/Data/InvoiceRepository.cs
+    lines: [19, 20]
+    category: security
+    severity: critical
+    description: SQL injection through the status query parameter interpolated into FromSqlRaw.
+  - id: BS-03
+    file: src/Services/InvoiceService.cs
+    lines: [[11, 11], [23, 27]]
+    category: concurrency
+    severity: high
+    description: A static Dictionary is read and written by concurrent requests without a lock, which can corrupt it.
+  - id: BS-04
+    file: src/Services/InvoiceService.cs
+    lines: [31, 35]
+    category: performance
+    severity: medium
+    description: TotalOutstandingAsync loads every invoice ever issued into memory to sum the unpaid ones.
+  - id: BS-05
+    file: src/Services/InvoiceService.cs
+    lines: [38, 43]
+    category: logic
+    severity: medium
+    description: LateFee is negative for an unpaid invoice that is not due yet, because daysLate is never clamped at zero.
+  - id: BS-06
+    file: src/Services/EmailSender.cs
+    lines: [28, 31]
+    category: error-handling
+    severity: medium
+    description: Every send failure is swallowed and reported as sent, so the invoice is marked reminded and never retried.

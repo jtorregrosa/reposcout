@@ -1,0 +1,89 @@
+# RepoScout, phase 2 template. DISABLED: no CI trigger, no PR trigger, no schedule.
+# To enable: create the pipeline in Azure DevOps, add the secret variables below, then uncomment `schedules`.
+#
+# Secrets (pipeline variables marked secret, or a variable group linked from the Library):
+#   CLAUDE_CODE_OAUTH_TOKEN  output of `claude setup-token` (subscription auth; never ANTHROPIC_API_KEY)
+#   REPOSCOUT_ADO_PAT        optional: a Code (Read) PAT, only when the audited repos live outside this
+#                            organization or the build identity may not read them. Otherwise the job uses
+#                            System.AccessToken, passed as REPOSCOUT_ADO_BEARER.
+
+trigger: none
+pr: none
+
+# schedules:
+#   - cron: "0 5 * * 1-5"
+#     displayName: Incremental audit, weekdays 05:00 UTC
+#     branches: { include: [main] }
+#     always: true
+#   - cron: "0 3 * * 6"
+#     displayName: Full audit, Saturdays 03:00 UTC
+#     branches: { include: [main] }
+#     always: true
+
+parameters:
+  - name: mode
+    displayName: Audit mode
+    type: string
+    default: incremental
+    values: [incremental, full]
+  - name: repo
+    displayName: Single repository (empty = all in repos.yaml)
+    type: string
+    default: " "
+
+pool:
+  vmImage: ubuntu-latest
+
+jobs:
+  - job: audit
+    displayName: 🔎 RepoScout audit
+    timeoutInMinutes: 240
+    steps:
+      - checkout: self
+        persistCredentials: true
+        fetchDepth: 1
+
+      - task: NodeTool@0
+        displayName: ⬢ Node 22
+        inputs:
+          versionSpec: "22.x"
+
+      - script: |
+          set -euo pipefail
+          npm install -g pnpm@11.17.0 @anthropic-ai/claude-code@2.1.292
+          pnpm install --frozen-lockfile
+          pnpm run build
+          claude --version
+        displayName: 📦 Install dependencies, build the CLI and install Claude Code
+
+      - script: |
+          set -euo pipefail
+          test -z "${ANTHROPIC_API_KEY:-}" || { echo "ANTHROPIC_API_KEY must not be set"; exit 1; }
+          mode="${{ parameters.mode }}"
+          # The Saturday schedule is the weekly full audit.
+          if [ "$(Build.Reason)" = "Schedule" ] && [ "$(date -u +%u)" = "6" ]; then mode=full; fi
+          args=(run --mode "$mode")
+          if [ -n "$(echo '${{ parameters.repo }}' | xargs)" ]; then args+=(--repo "$(echo '${{ parameters.repo }}' | xargs)"); fi
+          node dist/cli.js doctor
+          node dist/cli.js "${args[@]}"
+        displayName: 🔎 Run audit
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: $(CLAUDE_CODE_OAUTH_TOKEN)
+          REPOSCOUT_ADO_BEARER: $(System.AccessToken)
+          REPOSCOUT_ADO_PAT: $(REPOSCOUT_ADO_PAT)
+
+      - publish: reports
+        artifact: reposcout-reports-$(Build.BuildId)
+        displayName: 📤 Publish reports
+        condition: always()
+
+      # state/ must survive between runs. Committing it back keeps history in the repo, like phase 1.
+      - script: |
+          set -euo pipefail
+          git config user.name "RepoScout"
+          git config user.email "reposcout@noreply"
+          git add state reports
+          git diff --cached --quiet || git commit -m "chore: reposcout audit $(Build.BuildNumber) [skip ci]"
+          git push origin HEAD:$(Build.SourceBranchName)
+        displayName: 💾 Persist state and reports
+        condition: succeededOrFailed()

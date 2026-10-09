@@ -1,0 +1,57 @@
+{
+  "name": "reposcout",
+  "version": "0.1.0-alpha.1",
+  "private": true,
+  "description": "Automated bug auditing of Azure DevOps repositories with Claude Code subagents.",
+  "type": "module",
+  "bin": {
+    "reposcout": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "web/dist",
+    ".claude/agents",
+    ".claude/skills"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && pnpm --filter @reposcout/web build",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "dev": "tsx src/cli.ts",
+    "reposcout": "node dist/cli.js",
+    "audit": "node dist/cli.js run",
+    "audit:full": "node dist/cli.js run --mode full",
+    "doctor": "node dist/cli.js doctor",
+    "ui": "node dist/cli.js ui",
+    "typecheck": "tsc -p tsconfig.json && tsc -p test/tsconfig.json && pnpm --filter @reposcout/web typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build",
+    "eval": "tsx eval/run.ts",
+    "build:cli": "tsc -p tsconfig.build.json",
+    "build:web": "pnpm --filter @reposcout/web build",
+    "dev:web": "pnpm --filter @reposcout/web dev"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "packageManager": "pnpm@11.17.0",
+  "dependencies": {
+    "better-sqlite3": "13.0.3",
+    "commander": "15.0.0",
+    "picomatch": "4.0.7",
+    "yaml": "2.9.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "22.20.5",
+    "@types/picomatch": "4.0.3",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

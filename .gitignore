@@ -1,0 +1,26 @@
+dist/
+node_modules/
+workspace/
+.claude-home/
+.env
+.env.*
+reports/**/.work/
+reports/**/logs/
+state/.lock
+.playwright-mcp/
+repos.yaml.reposcout-tmp
+state/.cancel
+web/dist/
+exports/
+state/*.db-wal
+state/*.db-shm
+# Runtime data: the audit record and the generated reports stay out of the tool's history.
+state/*.db
+reports/
+.claude/worktrees/
+# Local only: database backups, Claude Code's session lock and scratch scripts.
+state/backups/
+.claude/scheduled_tasks.lock
+probe.py
+# Each user's own configuration; repos.example.yaml is the template.
+repos.yaml

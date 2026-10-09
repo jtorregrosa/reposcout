@@ -1,0 +1,270 @@
+{
+  "schema": "reposcout/eval@1",
+  "at": "2026-10-09T06:00:55.778Z",
+  "prompt_version": "709f24e17351",
+  "models": {
+    "orchestrator": "sonnet",
+    "specialists": "sonnet",
+    "verifier": "opus"
+  },
+  "analyzers": [
+    "security",
+    "concurrency",
+    "error-handling",
+    "logic",
+    "performance"
+  ],
+  "cases": [
+    {
+      "case": "billing-svc",
+      "score": {
+        "case": "billing-svc",
+        "analyzers": [
+          "security",
+          "concurrency",
+          "error-handling",
+          "logic",
+          "performance"
+        ],
+        "bugs": 6,
+        "found": [
+          "BS-01",
+          "BS-02",
+          "BS-03",
+          "BS-04",
+          "BS-05",
+          "BS-06"
+        ],
+        "cross_category": [],
+        "speculative_hits": [],
+        "missed": [],
+        "findings": 6,
+        "duplicates": 0,
+        "false_positives": [],
+        "recall": 1,
+        "precision": 1,
+        "recall_by_analyzer": {
+          "security": {
+            "found": 2,
+            "total": 2,
+            "recall": 1
+          },
+          "concurrency": {
+            "found": 1,
+            "total": 1,
+            "recall": 1
+          },
+          "error-handling": {
+            "found": 1,
+            "total": 1,
+            "recall": 1
+          },
+          "logic": {
+            "found": 1,
+            "total": 1,
+            "recall": 1
+          },
+          "performance": {
+            "found": 1,
+            "total": 1,
+            "recall": 1
+          }
+        },
+        "lines": 165,
+        "fp_per_kloc": 0
+      },
+      "usage": {
+        "cost_usd": 0.8072119000000001,
+        "wall_s": 156,
+        "turns": 14,
+        "input_tokens": 455718,
+        "output_tokens": 34636,
+        "five_hour": 0.009999999999999981,
+        "seven_day": 0
+      }
+    },
+    {
+      "case": "orders-api",
+      "score": {
+        "case": "orders-api",
+        "analyzers": [
+          "security",
+          "concurrency",
+          "error-handling",
+          "logic",
+          "performance"
+        ],
+        "bugs": 9,
+        "found": [
+          "OA-01",
+          "OA-02",
+          "OA-03",
+          "OA-05",
+          "OA-06",
+          "OA-07",
+          "OA-08",
+          "OA-09"
+        ],
+        "cross_category": [],
+        "speculative_hits": [],
+        "missed": [
+          "OA-04"
+        ],
+        "findings": 9,
+        "duplicates": 0,
+        "false_positives": [],
+        "recall": 0.8888888888888888,
+        "precision": 1,
+        "recall_by_analyzer": {
+          "security": {
+            "found": 2,
+            "total": 2,
+            "recall": 1
+          },
+          "concurrency": {
+            "found": 1,
+            "total": 1,
+            "recall": 1
+          },
+          "error-handling": {
+            "found": 2,
+            "total": 2,
+            "recall": 1
+          },
+          "logic": {
+            "found": 2,
+            "total": 2,
+            "recall": 1
+          },
+          "performance": {
+            "found": 1,
+            "total": 2,
+            "recall": 0.5
+          }
+        },
+        "lines": 184,
+        "fp_per_kloc": 0
+      },
+      "usage": {
+        "cost_usd": 0.8523896999999999,
+        "wall_s": 168,
+        "turns": 15,
+        "input_tokens": 434431,
+        "output_tokens": 37572,
+        "five_hour": 0.010000000000000009,
+        "seven_day": 0
+      }
+    },
+    {
+      "case": "reports-svc",
+      "score": {
+        "case": "reports-svc",
+        "analyzers": [
+          "security",
+          "concurrency",
+          "error-handling",
+          "logic",
+          "performance"
+        ],
+        "bugs": 6,
+        "found": [
+          "RS-01",
+          "RS-02",
+          "RS-03",
+          "RS-04",
+          "RS-05",
+          "RS-06"
+        ],
+        "cross_category": [],
+        "speculative_hits": [],
+        "missed": [],
+        "findings": 6,
+        "duplicates": 0,
+        "false_positives": [],
+        "recall": 1,
+        "precision": 1,
+        "recall_by_analyzer": {
+          "security": {
+            "found": 0,
+            "total": 0,
+            "recall": null
+          },
+          "concurrency": {
+            "found": 0,
+            "total": 0,
+            "recall": null
+          },
+          "error-handling": {
+            "found": 0,
+            "total": 0,
+            "recall": null
+          },
+          "logic": {
+            "found": 0,
+            "total": 0,
+            "recall": null
+          },
+          "performance": {
+            "found": 6,
+            "total": 6,
+            "recall": 1
+          }
+        },
+        "lines": 257,
+        "fp_per_kloc": 0
+      },
+      "usage": {
+        "cost_usd": 0.8134817000000001,
+        "wall_s": 163,
+        "turns": 13,
+        "input_tokens": 388939,
+        "output_tokens": 34987,
+        "five_hour": 0.020000000000000018,
+        "seven_day": 0
+      }
+    }
+  ],
+  "totals": {
+    "bugs": 21,
+    "found": 20,
+    "recall": 0.9523809523809523,
+    "precision": 1,
+    "findings": 21,
+    "false_positives": 0,
+    "control_false_positives": 0,
+    "fp_per_kloc": 0,
+    "cross_category": 0,
+    "speculative_hits": 0,
+    "cost_usd": 2.4730833,
+    "wall_s": 487,
+    "five_hour": 0.04000000000000001,
+    "seven_day": 0,
+    "recall_by_analyzer": {
+      "security": {
+        "found": 4,
+        "total": 4,
+        "recall": 1
+      },
+      "concurrency": {
+        "found": 2,
+        "total": 2,
+        "recall": 1
+      },
+      "error-handling": {
+        "found": 3,
+        "total": 3,
+        "recall": 1
+      },
+      "logic": {
+        "found": 3,
+        "total": 3,
+        "recall": 1
+      },
+      "performance": {
+        "found": 8,
+        "total": 9,
+        "recall": 0.8888888888888888
+      }
+    }
+  }
+}

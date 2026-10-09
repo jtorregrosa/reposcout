@@ -1,0 +1,7 @@
+packages:
+  - web
+
+allowBuilds:
+  # Ships prebuilt binaries for every supported platform; compiling would need Python and MSVC.
+  better-sqlite3: false
+  esbuild: true

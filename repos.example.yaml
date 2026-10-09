@@ -1,0 +1,112 @@
+# RepoScout configuration template. Copy it to repos.yaml, which is git-ignored, and list your own repositories.
+# Per-repo keys override `defaults`; `excluded_paths` adds to the defaults.
+
+defaults:
+  # azure-devops (organization/project/repo) or github (organization is the owner; project is not needed).
+  provider: azure-devops
+  organization: my-organization
+  project: my-project
+  # Optional on GitHub: name of the environment variable holding a read-only token, only for private repositories.
+  # Defaults to REPOSCOUT_GITHUB_TOKEN on GitHub and REPOSCOUT_ADO_PAT on Azure DevOps.
+  mode: incremental
+  # Specialists to run: security, concurrency, error-handling, logic, performance. The verifier always runs.
+  # A finding is only marked resolved by a run that included its analyzer.
+  analyzers: [security, concurrency, error-handling, logic, performance]
+  # Hard caps on files handed to the auditors in one run. Ranking: focus_paths, source, config, tests.
+  # A capped full run starts the next one from the files audited longest ago, so coverage rotates.
+  max_files_per_run: 40
+  max_files_full_run: 120
+  # Files larger than this are never audited (generated code, bundles, fixtures).
+  max_file_bytes: 200000
+  claude:
+    # Aliases resolved by Claude Code: haiku, sonnet, opus, fable.
+    models:
+      orchestrator: sonnet
+      specialists: sonnet
+      verifier: opus
+    fallback_model: sonnet
+    # max_turns bounds the orchestrator; subagent_max_turns bounds each specialist and the verifier.
+    max_turns: 60
+    subagent_max_turns:
+      specialists: 40
+      verifier: 60
+    timeout_minutes: 45
+    # isolated: run with a private CLAUDE_CONFIG_DIR + CLAUDE_CODE_OAUTH_TOKEN (recommended, phase 2 parity).
+    # login: reuse your interactive login; personal and managed plugins, hooks and CLAUDE.md files load too.
+    auth: isolated
+  # Never worth audit budget: docs and specs, build output and lock files, generated code (EF migrations,
+  # designers, NSwag clients and OpenAPI specs), tests the auditors are told to skip, third-party code
+  # committed to the repository, encrypted env files and binary assets.
+  excluded_paths:
+    - "**/*.md"
+    - "docs/**"
+    - "openspec/**"
+    - ".docubuddy/**"
+    - "**/node_modules/**"
+    - "**/bin/**"
+    - "**/obj/**"
+    - "**/dist/**"
+    - "**/*.min.js"
+    # Stylesheets and editor settings cannot carry a bug any analyzer looks for.
+    - "**/*.css"
+    - "**/*.scss"
+    - "**/*.sass"
+    - "**/*.less"
+    - "**/.vscode/**"
+    - "**/*.lock"
+    - "**/pnpm-lock.yaml"
+    - "**/package-lock.json"
+    - "**/*.Designer.cs"
+    - "**/Migrations/**"
+    - "**/api-clients/**"
+    - "api-specs/**"
+    - "test/**"
+    - "e2e/**"
+    - "**/*.UnitTests/**"
+    - "**/*.Tests/**"
+    - "**/*.spec.ts"
+    - "**/*.test.ts"
+    - "**/vendor/**"
+    - "**/.env*"
+    - "env.*.cmd"
+    - "**/*.snap"
+    - "**/*.svg"
+    - "**/*.png"
+    - "**/*.jpg"
+    - "**/*.ico"
+    - "**/*.pdf"
+
+repos:
+  - name: my-service
+    repo: my-service
+    branch: main
+    # Facts you vouch for that the code cannot show (scale, deployment). The auditors trust them, so they can settle
+    # candidates that hinge on one; a wrong fact silences real findings.
+    facts:
+      - The orders table holds about 2 million rows and grows by about 5,000 a day.
+      - The API is only reachable through a gateway that rate-limits every client.
+    # Free text handed to the auditors; focus_paths (globs) are what ranks files first.
+    focus_areas:
+      - authentication and session handling
+      - isolation between tenants (one tenant must never see or change another's data)
+      - money handling (rounding, totals, duplicate charges)
+    focus_paths:
+      - "src/Auth/**"
+      - "src/Billing/**"
+    excluded_paths:
+      - "tests/**"
+      - "scripts/**"
+    # Reviewed false positives: never reported again while the anchored code is unchanged.
+    # Take the fingerprint from the report; a reason is required.
+    suppressed: []
+    #  - fingerprint: 0123456789abcdef0123456789abcdef
+    #    reason: value comes from trusted configuration, never from user input
+    # Runs only inside a throwaway worktree, never in the clone. Leave unset to disable reproduction.
+    # test_command: dotnet test --no-restore
+
+  # A public GitHub repository needs no token.
+  - name: my-library
+    provider: github
+    organization: my-github-user
+    repo: my-library
+    branch: main

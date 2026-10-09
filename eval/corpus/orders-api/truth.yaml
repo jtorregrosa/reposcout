@@ -1,0 +1,63 @@
+# Ground truth for the orders-api case: a small Express-style TypeScript service.
+# lines is an inclusive range, or a list of ranges; a finding matches within 3 lines of one.
+case: orders-api
+description: Express-style order, inventory and payment service in TypeScript.
+clean_files:
+  - src/db.ts
+  - src/middleware/auth.ts
+  - src/lib/format.ts
+bugs:
+  - id: OA-01
+    file: src/routes/users.ts
+    lines: [14, 14]
+    category: security
+    severity: critical
+    description: SQL injection through the name query parameter interpolated into a LIKE clause.
+  - id: OA-02
+    file: src/routes/users.ts
+    lines: [27, 28]
+    category: security
+    severity: high
+    description: DELETE /users/:id has no requireRole, so any caller can delete any user.
+  - id: OA-03
+    file: src/routes/orders.ts
+    lines: [24, 24]
+    category: logic
+    severity: medium
+    description: Pages start at 1 but the offset is page * size, so the first page of orders is never returned.
+  - id: OA-04
+    file: src/routes/orders.ts
+    lines: [26, 28]
+    category: performance
+    severity: medium
+    description: One order_lines query per order (N+1) instead of one query for the page.
+  - id: OA-05
+    file: src/services/inventory.ts
+    lines: [8, 10]
+    category: concurrency
+    severity: high
+    description: Check-then-act on stock across awaits; concurrent checkouts oversell and the absolute UPDATE loses decrements.
+  - id: OA-06
+    file: src/services/inventory.ts
+    lines: [16, 21]
+    category: error-handling
+    severity: medium
+    description: release swallows the database error and returns true, so a failed restock is reported as done.
+  - id: OA-07
+    file: src/services/payment.ts
+    lines: [11, 18]
+    category: error-handling
+    severity: high
+    description: charge never checks res.ok; a declined or failed charge returns an undefined id and the order is marked paid.
+  - id: OA-08
+    file: src/services/payment.ts
+    lines: [24, 25]
+    category: logic
+    severity: medium
+    description: instalments drops the remainder, so the parts do not add up to the total.
+  - id: OA-09
+    file: src/lib/cache.ts
+    lines: [9, 14]
+    category: performance
+    severity: medium
+    description: Entries are never evicted and keys come from a public route's path parameter, so the map grows without bound.
