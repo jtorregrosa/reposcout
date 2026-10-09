@@ -211,18 +211,6 @@ The finding detail SHALL let the auditor change a finding's type (bug, vulnerabi
 - **WHEN** the request gives neither field, a type other than bug, vulnerability or chore, or a non-boolean personal-data value
 - **THEN** it is refused with status 400
 
-### Requirement: Decide a speculative candidate
-The finding detail SHALL offer Confirm and Refute for speculative candidates, each requiring a reason of 3 to 300 characters, recorded in the database with the auditor's account name and time, and SHALL offer Undo this decision on a decided finding.
-
-#### Scenario: Confirming
-- **WHEN** the auditor confirms a speculative candidate with a reason
-- **THEN** it becomes an open finding showing who confirmed it, when and why
-
-#### Scenario: Deciding a non-speculative finding
-- **WHEN** a decision is requested for a finding that is not speculative
-- **THEN** it is refused with status 409
-- **AND** a decision for an unknown finding, or an undo with no decision, is refused with status 404
-
 ### Requirement: Export the current view
 The Findings page SHALL offer Export of exactly the findings the current filters show, as a self-contained printable HTML report, a Markdown report, a SARIF 2.1.0 log, or a copy of their fingerprints, and SHALL disable Export when the view is empty.
 
@@ -331,4 +319,28 @@ The dashboard SHALL serve a finding's stage history, oldest first, as a read-onl
 #### Scenario: Stage history requested
 - **WHEN** the dashboard requests the stage history of a finding that was detected and then validated by reproduction
 - **THEN** it receives two entries in order, the first with the source `initial` and the second with the source `reproduced`
+
+### Requirement: Decide a finding
+The finding detail SHALL offer Confirm and Refute for speculative candidates, Confirm for open findings at the `detected` stage and Refute for every open finding, each requiring a reason of 3 to 300 characters, recorded in the database with the auditor's account name and time, and SHALL offer Undo this decision on a decided finding. The actions SHALL be hidden on a finding that already has a decision, and their wording SHALL name a candidate or a finding according to its status.
+
+#### Scenario: Confirming
+- **WHEN** the auditor confirms a speculative candidate with a reason
+- **THEN** it becomes an open finding showing who confirmed it, when and why
+
+#### Scenario: Refuting an open finding
+- **WHEN** the auditor refutes an open finding with a reason
+- **THEN** it moves to the Refuted tab showing who refuted it, when and why, and offers Undo this decision
+
+#### Scenario: Confirming an open finding
+- **WHEN** the auditor confirms an open finding at `detected`
+- **THEN** it stays in the Open tab, its stage timeline shows `validated`, and the detail shows who confirmed it, when and why
+
+#### Scenario: Reproduced open finding
+- **WHEN** the auditor selects an open finding at `validated`
+- **THEN** the detail offers Refute and does not offer Confirm
+
+#### Scenario: Deciding a non-speculative finding
+- **WHEN** a decision is requested for a finding that is neither speculative nor open, or that already has a decision
+- **THEN** it is refused with status 409
+- **AND** a decision for an unknown finding, or an undo with no decision, is refused with status 404
 
