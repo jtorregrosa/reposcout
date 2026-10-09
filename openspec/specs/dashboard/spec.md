@@ -2,9 +2,7 @@
 
 ## Purpose
 The dashboard is the local web interface started by the `ui` command, where an auditor follows runs, triages findings, starts and cancels audits, and reads coverage and cost. It reads the state database and the run event logs, and its only writes are the suppression list in repos.yaml, auditor decisions and label corrections in the database, detached runs and cancel requests. Request guards and the page's content security policy are part of audit-security; what statuses, decisions and suppressions mean is part of finding-lifecycle.
-
 ## Requirements
-
 ### Requirement: Starting the dashboard
 The CLI SHALL provide a `ui` command that serves the dashboard on `http://127.0.0.1:<port>/`, with `--port` defaulting to 4477 (an integer from 0 to 65535), `--config` naming repos.yaml, and opening the default browser unless `--no-open` is given.
 
@@ -73,21 +71,45 @@ The Findings page SHALL offer the status tabs Open (default), New, Speculative, 
 - **THEN** the page lists the candidates the verifier rejected in the last 7 days, with their reason and the specialists that proposed them, narrowed by the repository and search filters
 
 ### Requirement: Findings filters and sort
-The Findings page SHALL narrow the list by repository, severity, type (including findings with no type yet), category, personal data and a text search over title, file, description, fingerprint and repository, and SHALL sort by severity (default), newest first seen, or location.
+The Findings page SHALL narrow the list by:
+- repository;
+- severity;
+- type, including findings with no type yet;
+- category;
+- lifecycle stage (`detected`, `validated`, `reported` or `fixed`, several at once);
+- personal data;
+- a text search over title, file, description, fingerprint and repository.
+
+It SHALL sort by severity (default), by newest first seen, or by location.
 
 #### Scenario: Search
 - **WHEN** the auditor types part of a fingerprint in the search box
 - **THEN** only findings whose title, file, description, fingerprint or repository contain it are listed
 
+#### Scenario: Stage filter
+- **WHEN** the auditor selects the stages `validated` and `fixed`
+- **THEN** only findings at one of those stages are listed
+- **AND** each status tab counts only findings at those stages
+
 ### Requirement: Findings view state in the URL
-The Findings page MUST keep every filter, the status tab, the sort and the selected finding in the URL query (`status`, `repo`, `severity`, `category`, `kind`, `pd`, `q`, `sort`, `id`, `view`), so a view can be bookmarked, shared with another auditor and walked back with the browser's back button.
+The Findings page MUST keep every filter, the status tab, the sort and the selected finding in the URL query (`status`, `repo`, `severity`, `category`, `kind`, `stage`, `pd`, `q`, `sort`, `id`, `view`), so a view can be bookmarked, shared with another auditor and walked back with the browser's back button. A `stage` value that is not a known stage MUST be ignored.
 
 #### Scenario: Shared link
 - **WHEN** an auditor opens a Findings URL another auditor sent
 - **THEN** the same tab, filters, sort and selected finding are shown
 
+#### Scenario: Unknown stage in the URL
+- **WHEN** a Findings URL has `stage=validated,shipped`
+- **THEN** the stage filter holds only `validated`
+
 ### Requirement: Finding detail
-The selected finding SHALL open beside the list with its severity, category, status, file and line, type and personal-data mark, scenario, reproduction steps, why it is a bug, the suggested fix, the anchored code, confidence, specialists, first and last seen, commit, fingerprint, any unconfirmed point, suppression reason, resolution or auditor decision, and its history of statuses each linked to the run that set it.
+The selected finding SHALL open beside the list and show:
+- its severity, category, status, file and line, type and personal-data mark;
+- its lifecycle stage as a four-step timeline (detected, validated, reported, fixed) with the current step marked and the date each reached step was entered;
+- the scenario, reproduction steps, why it is a bug, the suggested fix and the anchored code;
+- its confidence, specialists, first and last seen, commit and fingerprint;
+- any unconfirmed point, suppression reason, resolution or auditor decision;
+- its history of statuses, each linked to the run that set it.
 
 #### Scenario: Speculative candidate selected
 - **WHEN** the auditor selects a speculative candidate
@@ -96,6 +118,10 @@ The selected finding SHALL open beside the list with its severity, category, sta
 #### Scenario: History
 - **WHEN** a finding is selected
 - **THEN** its history lists every status it has had, each linked to the run that set it
+
+#### Scenario: Stage timeline
+- **WHEN** the auditor selects a finding that was validated by an auditor and later resolved
+- **THEN** the timeline marks `fixed` as current, shows the dates it entered `detected`, `validated` and `fixed`, and leaves `reported` as not reached
 
 ### Requirement: Keyboard navigation
 The Findings page SHALL move to the next finding with `J` or Down arrow and the previous with `K` or Up arrow, focus the search box with `/`, and close the selected finding with `Esc`, ignoring these keys while typing in a field or while a dialog is open.
@@ -294,3 +320,11 @@ The dashboard MUST NOT change `test_command` or any repos.yaml key other than a 
 - **WHEN** an auditor uses any dashboard action
 - **THEN** repos.yaml changes at most in a repository's `suppressed` list
 - **AND** no state is deleted and nothing is sent to Azure DevOps
+
+### Requirement: Stage history endpoint
+The dashboard SHALL serve a finding's stage history, oldest first, as a read-only request behind the same guards as every other dashboard request, and SHALL include each finding's current stage, the time it entered it and the source of that change in the findings it serves.
+
+#### Scenario: Stage history requested
+- **WHEN** the dashboard requests the stage history of a finding that was detected and then validated by reproduction
+- **THEN** it receives two entries in order, the first with the source `initial` and the second with the source `reproduced`
+
