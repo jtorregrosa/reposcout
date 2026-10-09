@@ -11,7 +11,9 @@ const MAX = 300;
 
 export type Verdict = 'confirmed' | 'refuted';
 
-const COPY: Record<Verdict, { title: string; description: string; label: string; placeholder: string; submit: string }> = {
+type Copy = { title: string; description: string; label: string; placeholder: string; submit: string };
+
+const CANDIDATE: Record<Verdict, Copy> = {
   confirmed: {
     title: 'Confirm this candidate',
     description:
@@ -30,13 +32,32 @@ const COPY: Record<Verdict, { title: string; description: string; label: string;
   },
 };
 
+const FINDING: Record<Verdict, Copy> = {
+  confirmed: {
+    title: 'Confirm this finding',
+    description:
+      'It stays open and moves to the validated stage. Use it when you have checked the bug yourself, by following the code path or reproducing it by hand. The decision is recorded with your reason and can be undone.',
+    label: 'What confirms it?',
+    placeholder: 'For example: posting an empty list to /orders returns 500 on the staging environment.',
+    submit: 'Confirm finding',
+  },
+  refuted: {
+    title: 'Refute this finding',
+    description:
+      'It moves to Refuted and stays there in later runs, even when an audit reports it again, until you undo this or its code changes. Later audits are told it is a false positive. To keep a real bug you will not fix out of the way, suppress it instead.',
+    label: 'Why is it not a bug?',
+    placeholder: 'For example: every caller validates the value before it reaches this method.',
+    submit: 'Refute finding',
+  },
+};
+
 export function DecideDialog({ finding, verdict, onOpenChange }: { finding: FindingView; verdict: Verdict | null; onOpenChange: (open: boolean) => void }) {
   const [reason, setReason] = useState('');
   const decide = useAction('decide');
   const id = useId();
   const length = reason.trim().length;
   const valid = length >= MIN && length <= MAX;
-  const copy = COPY[verdict ?? 'confirmed'];
+  const copy = (finding.status === 'open' ? FINDING : CANDIDATE)[verdict ?? 'confirmed'];
 
   const submit = () => {
     if (!valid || !verdict) return;

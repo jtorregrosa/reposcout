@@ -80,17 +80,20 @@ function entryOf(row: FindingRow): FindingEntry {
 export class DecisionError extends Error {
   override name = 'DecisionError';
   constructor(
-    readonly kind: 'not-found' | 'not-speculative' | 'no-decision',
+    readonly kind: 'not-found' | 'not-decidable' | 'already-decided' | 'already-validated' | 'no-decision',
     message: string,
   ) {
     super(message);
   }
 }
 
-// What a decision does to a speculative candidate. Anything else is left alone: a run that has since confirmed or
-// refuted the candidate on its own evidence keeps its result.
+// What a decision does to the entry a run writes. A decision on a speculative candidate acts only while the run still
+// sees it as speculative: a run that has since confirmed or refuted it on its own evidence keeps its result. A
+// refutation of an open finding acts whatever the run thinks of it, as a suppression does.
 function applyDecision(e: FindingEntry, d: Decision | undefined): FindingEntry {
-  if (!d || e.status !== 'speculative') return e;
+  if (!d) return e;
+  const applies = d.decided_on === 'open' ? d.verdict === 'refuted' && (e.status === 'open' || e.status === 'speculative') : e.status === 'speculative';
+  if (!applies) return e;
   if (d.verdict === 'confirmed') return { ...e, status: 'open' };
   return { ...e, status: 'refuted', refuted_at: d.decided_at, resolution: `Refuted by ${d.decided_by}: ${d.reason}` };
 }
@@ -330,45 +333,55 @@ export class Store {
   }
 
   decisionsFor(repo: string): Map<string, Decision> {
-    const rows = this.db.prepare('SELECT fingerprint, verdict, reason, decided_by, decided_at FROM triage WHERE repo = ?').all(repo) as (Decision & {
+    const rows = this.db
+      .prepare('SELECT fingerprint, verdict, reason, decided_by, decided_at, decided_on FROM triage WHERE repo = ?')
+      .all(repo) as (Decision & {
       fingerprint: string;
     })[];
     return new Map(rows.map(({ fingerprint, ...d }) => [fingerprint, d]));
   }
 
-  // Records an auditor's decision on a speculative candidate and applies it to the state at once.
-  decide(repo: string, fingerprint: string, d: Decision): FindingEntry {
+  // Records an auditor's decision on a speculative candidate or an open finding and applies it to the state at once.
+  decide(repo: string, fingerprint: string, d: Omit<Decision, 'decided_on'>): FindingEntry {
     return this.db
       .transaction(() => {
         const row = this.db.prepare('SELECT * FROM findings WHERE repo = ? AND fingerprint = ?').get(repo, fingerprint) as FindingRow | undefined;
         if (!row) throw new DecisionError('not-found', 'no such finding in this repository');
-        if (row.status !== 'speculative') throw new DecisionError('not-speculative', `only a speculative candidate can be decided; this one is ${row.status}`);
-        this.db
-          .prepare(
-            `INSERT INTO triage (repo, fingerprint, verdict, reason, decided_by, decided_at) VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT (repo, fingerprint) DO UPDATE SET verdict = excluded.verdict, reason = excluded.reason, decided_by = excluded.decided_by, decided_at = excluded.decided_at`,
-          )
-          .run(repo, fingerprint, d.verdict, d.reason, d.decided_by, d.decided_at);
-        const next = applyDecision(entryOf(row), d);
-        this.setStatus(repo, fingerprint, next);
+        if (row.status !== 'speculative' && row.status !== 'open') {
+          throw new DecisionError('not-decidable', `only a speculative candidate or an open finding can be decided; this one is ${row.status}`);
+        }
+        if (this.db.prepare('SELECT 1 FROM triage WHERE repo = ? AND fingerprint = ?').get(repo, fingerprint)) {
+          throw new DecisionError('already-decided', 'this finding already has a decision; undo it first');
+        }
         const current = this.stagesFor(repo).get(fingerprint);
-        const stage = nextStage({ current, previousStatus: 'speculative', entry: next, confirmedByAuditor: d.verdict === 'confirmed' });
+        if (row.status === 'open' && d.verdict === 'confirmed' && current && current.stage !== 'detected') {
+          throw new DecisionError('already-validated', `this finding is already ${current.stage}`);
+        }
+        const decision: Decision = { ...d, decided_on: row.status };
+        this.db
+          .prepare('INSERT INTO triage (repo, fingerprint, verdict, reason, decided_by, decided_at, decided_on) VALUES (?, ?, ?, ?, ?, ?, ?)')
+          .run(repo, fingerprint, d.verdict, d.reason, d.decided_by, d.decided_at, decision.decided_on);
+        const next = applyDecision(entryOf(row), decision);
+        if (next.status !== row.status) {
+          this.setStatus(repo, fingerprint, next);
+          this.event(
+            repo,
+            fingerprint,
+            d.decided_at,
+            row.status,
+            next.status,
+            `${d.verdict === 'confirmed' ? 'Confirmed' : 'Refuted'} by ${d.decided_by}: ${d.reason}`,
+            d.decided_by,
+          );
+        }
+        const stage = nextStage({ current, previousStatus: row.status, entry: next, confirmedByAuditor: d.verdict === 'confirmed' });
         if (stage) this.recordStage(repo, fingerprint, current, stage, { at: d.decided_at, runId: null, actor: d.decided_by });
-        this.event(
-          repo,
-          fingerprint,
-          d.decided_at,
-          'speculative',
-          next.status,
-          `${d.verdict === 'confirmed' ? 'Confirmed' : 'Refuted'} by ${d.decided_by}: ${d.reason}`,
-          d.decided_by,
-        );
         return next;
       })
       .immediate();
   }
 
-  // Withdraws a decision; a candidate the decision moved goes back to speculative.
+  // Withdraws a decision; a finding the decision moved goes back to the status it was decided on.
   undecide(repo: string, fingerprint: string, by: string, at: string): FindingEntry {
     return this.db
       .transaction(() => {
@@ -381,9 +394,11 @@ export class Store {
         const moved = (d.verdict === 'confirmed' && entry.status === 'open') || (d.verdict === 'refuted' && entry.status === 'refuted');
         if (!moved) return entry;
         const { refuted_at: _at, resolution: _resolution, ...rest } = entry;
-        const back: FindingEntry = d.verdict === 'refuted' ? { ...rest, status: 'speculative' } : { ...entry, status: 'speculative' };
-        this.setStatus(repo, fingerprint, back);
-        this.event(repo, fingerprint, at, entry.status, 'speculative', `Decision withdrawn by ${by}`, by);
+        const back: FindingEntry = d.verdict === 'refuted' ? { ...rest, status: d.decided_on } : { ...entry, status: d.decided_on };
+        if (back.status !== entry.status) {
+          this.setStatus(repo, fingerprint, back);
+          this.event(repo, fingerprint, at, entry.status, back.status, `Decision withdrawn by ${by}`, by);
+        }
         if (d.verdict === 'confirmed') {
           const current = this.stagesFor(repo).get(fingerprint);
           const stage = withdrawnStage(current, entry, { beforeAuditor: this.stageBefore(repo, fingerprint, 'auditor') });
@@ -434,7 +449,7 @@ export class Store {
           .prepare('SELECT repo, fingerprint, at, run_id, from_stage, to_stage, source, note, actor FROM finding_stage_events ORDER BY id')
           .all() as Snapshot['stages'],
         decisions: this.db
-          .prepare('SELECT repo, fingerprint, verdict, reason, decided_by, decided_at FROM triage ORDER BY repo, fingerprint')
+          .prepare('SELECT repo, fingerprint, verdict, reason, decided_by, decided_at, decided_on FROM triage ORDER BY repo, fingerprint')
           .all() as Snapshot['decisions'],
         labels: (
           this.db.prepare('SELECT repo, fingerprint, kind, personal_data, set_by, set_at FROM labels ORDER BY repo, fingerprint').all() as (Omit<
@@ -487,8 +502,8 @@ export class Store {
 
   restoreDecision(repo: string, fingerprint: string, d: Decision): void {
     this.db
-      .prepare('INSERT INTO triage (repo, fingerprint, verdict, reason, decided_by, decided_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(repo, fingerprint, d.verdict, d.reason, d.decided_by, d.decided_at);
+      .prepare('INSERT INTO triage (repo, fingerprint, verdict, reason, decided_by, decided_at, decided_on) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(repo, fingerprint, d.verdict, d.reason, d.decided_by, d.decided_at, d.decided_on);
   }
 
   restoreLabels(repo: string, fingerprint: string, o: LabelOverride): void {

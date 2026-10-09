@@ -65,6 +65,7 @@ export interface FakeCall {
   repo?: string;
   mode?: string;
   files?: string[];
+  false_positives?: string[];
 }
 
 // The environment of a CLI run against the fake claude; home is REPOSCOUT_HOME, when there is one.

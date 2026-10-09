@@ -203,4 +203,8 @@ export const MIGRATIONS: string[] = [
   INSERT INTO finding_stage_events (repo, fingerprint, at, run_id, from_stage, to_stage, source, note, actor)
   SELECT repo, fingerprint, since, NULL, NULL, stage, source, NULL, NULL FROM finding_stages ORDER BY repo, fingerprint;
   `,
+  `
+  -- The status a decision was made on. Until open findings could be decided, every decision was on a speculative one.
+  ALTER TABLE triage ADD COLUMN decided_on TEXT NOT NULL DEFAULT 'speculative' CHECK (decided_on IN ('speculative', 'open'));
+  `,
 ];

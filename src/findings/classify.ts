@@ -51,6 +51,8 @@ export interface ClassifyInput {
   reviews: KnownFindingReview[];
   runAt: string;
   suppressed?: Map<string, string>;
+  // Fingerprints an auditor refuted as open findings: they stay refuted however often a run confirms them again.
+  refutedByAuditor?: ReadonlySet<string>;
   auditedCategories?: readonly string[];
   readByCategory?: Map<string, Set<string>> | null;
 }
@@ -98,6 +100,7 @@ export function classify({
   reviews,
   runAt,
   suppressed = new Map(),
+  refutedByAuditor = new Set(),
   auditedCategories = CATEGORIES,
   readByCategory = null,
 }: ClassifyInput): Classification {
@@ -134,8 +137,14 @@ export function classify({
     suppressedHits.push(f.fingerprint);
   }
 
+  const stillRefuted = (fp: string) => refutedByAuditor.has(fp) && prevFindings[fp]?.status === 'refuted';
+  for (const f of findings.filter((x) => !suppressed.has(x.fingerprint) && stillRefuted(x.fingerprint))) {
+    const prev = prevFindings[f.fingerprint];
+    if (prev) nextState[f.fingerprint] = { ...prev, last_seen: runAt };
+  }
+
   const reported = findings
-    .filter((f) => !suppressed.has(f.fingerprint))
+    .filter((f) => !suppressed.has(f.fingerprint) && !stillRefuted(f.fingerprint))
     .map((reportedFinding): ReportedFinding => {
       const prev = prevFindings[reportedFinding.fingerprint];
       const f = carryOver(prev, reportedFinding);
