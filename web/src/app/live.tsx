@@ -1,12 +1,15 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, type ReactNode, useContext, useEffect, useRef, useState } from 'react';
-import { OVERVIEW_KEY } from '@/hooks/use-overview';
 import { applyEvents, emptyLive, type LiveState } from '@/lib/live';
+import { queryKeys } from '@/lib/queries';
 import type { LiveRunInfo, RunEvent } from '@/lib/types';
 
 export type Connection = 'connecting' | 'live' | 'down';
 
-const LiveContext = createContext<{ connection: Connection; live: LiveState } | null>(null);
+// Two contexts: the connection changes rarely, the run state once per animation frame during a run, and most
+// readers want only one of them.
+export const ConnectionContext = createContext<Connection | null>(null);
+export const RunContext = createContext<LiveState | null>(null);
 
 // One EventSource for the whole app: the run in progress (or the latest one) stays live on every page, and a
 // change on disk refreshes the overview everywhere at once.
@@ -28,7 +31,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     // A reconnect means the server came back: whatever failed to load meanwhile is fetched again.
     es.addEventListener('open', () => {
       setConnection('live');
-      void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
     });
     es.addEventListener('error', () => setConnection('down'));
     es.addEventListener('run', (e) => {
@@ -45,8 +48,8 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       frame.current ??= requestAnimationFrame(flush);
     });
     es.addEventListener('overview_changed', () => {
-      void queryClient.invalidateQueries({ queryKey: OVERVIEW_KEY });
-      void queryClient.invalidateQueries({ queryKey: ['finding-history'] });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.finding.all });
     });
     return () => {
       es.close();
@@ -54,11 +57,25 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     };
   }, [queryClient]);
 
-  return <LiveContext.Provider value={{ connection, live }}>{children}</LiveContext.Provider>;
+  return (
+    <ConnectionContext.Provider value={connection}>
+      <RunContext.Provider value={live}>{children}</RunContext.Provider>
+    </ConnectionContext.Provider>
+  );
+}
+
+export function useConnection(): Connection {
+  const ctx = useContext(ConnectionContext);
+  if (ctx == null) throw new Error('useConnection outside LiveProvider');
+  return ctx;
+}
+
+export function useRun(): LiveState {
+  const ctx = useContext(RunContext);
+  if (!ctx) throw new Error('useRun outside LiveProvider');
+  return ctx;
 }
 
 export function useLive() {
-  const ctx = useContext(LiveContext);
-  if (!ctx) throw new Error('useLive outside LiveProvider');
-  return ctx;
+  return { connection: useConnection(), live: useRun() };
 }

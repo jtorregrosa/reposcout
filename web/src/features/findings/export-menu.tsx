@@ -17,19 +17,37 @@ import { buildMarkdownReport } from '@/lib/report/markdown';
 import { buildSarifReport } from '@/lib/report/sarif';
 import type { FindingView, RepoView } from '@/lib/types';
 
-// Exports exactly what the filters show, so the filters decide a report's scope.
-export function ExportMenu({ findings, scope, repos, repoName }: { findings: FindingView[]; scope: string; repos: RepoView[]; repoName: string | null }) {
+// Exports exactly the findings it is given: what the filters show, a selection, or a queue.
+export function ExportMenu({
+  findings,
+  scope,
+  repos,
+  repoName,
+  label = 'Export',
+  what = 'in the current view',
+  size = 'sm',
+}: {
+  findings: FindingView[];
+  scope: string;
+  repos: RepoView[];
+  repoName: string | null;
+  label?: string;
+  what?: string;
+  size?: 'sm' | 'default';
+}) {
   const base = `reposcout-findings-${repoName ?? 'all'}-${timestamp()}`;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" disabled={!findings.length}>
+        <Button variant="outline" size={size} disabled={!findings.length}>
           <Download />
-          Export
+          {label}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel className="font-normal text-muted-foreground">{plural(findings.length, 'finding')} in the current view</DropdownMenuLabel>
+        <DropdownMenuLabel className="font-normal text-muted-foreground">
+          {plural(findings.length, 'finding')} {what}
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onSelect={() => {

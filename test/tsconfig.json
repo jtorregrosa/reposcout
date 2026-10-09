@@ -9,7 +9,9 @@
       "@/*": ["../web/src/*"]
     },
     "module": "ESNext",
-    "moduleResolution": "bundler"
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
-  "include": [".", "../web/src/**/*.test.ts"]
+  "include": [".", "../web/src/**/*.test.ts", "../web/src/**/*.test.tsx", "../web/src/test/setup.ts", "../web/src/test/render.tsx"]
 }

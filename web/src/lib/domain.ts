@@ -77,18 +77,28 @@ export const STATUS_HELP: Record<FindingStatus, string> = {
 };
 
 export const MODE_LABEL = {
+  incremental: 'Changes since the last audit',
+  full: 'Whole repository',
+  speculative: 'Settle speculative candidates',
+  validate: 'Reproduce detected findings with a test',
+} as const;
+
+// The CLI's own name for each mode, as run history and usage rows record it.
+export const MODE_SHORT = {
   incremental: 'Incremental',
   full: 'Full',
   speculative: 'Speculative review',
-  validate: 'Validate',
+  validate: 'Validation',
 } as const;
 
 export const MODE_HELP = {
-  incremental: 'Changes since the last audited commit.',
-  full: 'The whole repository, capped per run; the least recently audited files go first.',
-  speculative: 'Re-examines only the unconfirmed candidates, with the verifier.',
-  validate: 'Tries to reproduce open findings still at detected with a test; needs a usable test_command.',
+  incremental: 'Audits the files changed since the last audited commit.',
+  full: 'Audits the whole repository, capped per run; the least recently audited files go first.',
+  speculative: 'Re-examines the unconfirmed candidates with the verifier, and confirms or refutes them.',
+  validate: 'Writes a test for each open finding still at detected and runs it; needs a usable test_command.',
 } as const;
+
+export const modeShort = (mode: string | null | undefined) => (mode && mode in MODE_SHORT ? MODE_SHORT[mode as keyof typeof MODE_SHORT] : (mode ?? '—'));
 
 export const VALIDATION_OUTCOME_LABEL = {
   reproduced: 'Reproduced',

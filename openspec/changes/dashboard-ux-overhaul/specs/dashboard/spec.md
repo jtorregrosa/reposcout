@@ -356,7 +356,7 @@ The Findings page MUST keep the queue, every filter, the sort, the selected find
 ### Requirement: Finding detail
 The selected finding SHALL open beside the list and show in its header its severity, category, status, title, file and line, type and personal-data mark, and a compact progress bar of its lifecycle stage, then any unconfirmed point, suppression reason, resolution or auditor decision. Its tabs SHALL show:
 - Overview: the scenario, reproduction steps, why it is a bug, the suggested fix and the anchored code;
-- Evidence: what the verifier could not confirm, its validation attempts with date, outcome and reason, the reproduction test, the last speculative review, its confidence and specialists;
+- Evidence: its validation attempts with date, outcome and reason, the reproduction test, the last speculative review, its confidence and specialists;
 - History: its stage as a four-step timeline (detected, validated, reported, fixed) with the current step and the date each reached step was entered, its status history with each status linked to the run that set it, first and last seen, commit and fingerprint.
 
 #### Scenario: Speculative candidate selected

@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { History } from 'lucide-react';
 import { Link } from 'react-router';
 import { Skeleton } from '@/components/ui/skeleton';
-import { api } from '@/lib/api';
 import { STATUS_LABEL } from '@/lib/domain';
 import { formatDateTime } from '@/lib/format';
+import { findingHistoryQuery } from '@/lib/queries';
 import type { FindingEvent, FindingStatus } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -27,11 +27,9 @@ function describe(e: FindingEvent): string {
   return `${label(e.from_status)} → ${label(e.to_status)}`;
 }
 
-export const historyKey = (repo: string, fingerprint: string) => ['finding-history', repo, fingerprint] as const;
-
 // Every status the finding has had, newest first, each linked to the run that set it.
 export function FindingHistory({ repo, fingerprint }: { repo: string; fingerprint: string }) {
-  const { data, isLoading, error } = useQuery({ queryKey: historyKey(repo, fingerprint), queryFn: () => api.findingHistory(repo, fingerprint) });
+  const { data, isLoading, error } = useQuery(findingHistoryQuery({ repo, fingerprint }));
   return (
     <section className="space-y-2">
       <h3 className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">

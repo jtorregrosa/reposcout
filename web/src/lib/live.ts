@@ -12,6 +12,8 @@ export const STAGES = [
 
 export type Stage = (typeof STAGES)[number][0] | 'pending';
 
+export const REPO_STAGE_LABEL = { ...Object.fromEntries(STAGES), pending: 'Waiting' } as Record<Stage, string>;
+
 export type Tone = 'ok' | 'warn' | 'danger' | null;
 
 export interface RepoOutcome {

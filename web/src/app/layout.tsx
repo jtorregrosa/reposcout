@@ -1,7 +1,12 @@
-import { Activity, ChartColumn, FolderGit2, LayoutDashboard, ListChecks } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Activity, ChartColumn, FolderGit2, LayoutDashboard, ListChecks, Search } from 'lucide-react';
+import { Suspense, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { Logo } from '@/components/logo';
-import { Badge } from '@/components/ui/badge';
+import { Page } from '@/components/page';
+import { LoadingPage } from '@/components/query-state';
+import { Button } from '@/components/ui/button';
+import { Kbd } from '@/components/ui/kbd';
 import { Separator } from '@/components/ui/separator';
 import {
   Sidebar,
@@ -20,9 +25,16 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from '@/components/ui/sidebar';
-import { useOverview } from '@/hooks/use-overview';
+import { NewAuditProvider } from '@/features/runs/new-audit';
+import { useHotkeys } from '@/hooks/use-hotkeys';
+import { overviewQuery } from '@/lib/queries';
+import { triageCount } from '@/lib/selectors';
 import { cn } from '@/lib/utils';
-import { type Connection, useLive } from './live';
+import { Breadcrumbs } from './breadcrumbs';
+import { CommandPalette } from './command-palette';
+import { type Connection, useConnection, useRun } from './live';
+import { RunIndicator } from './run-indicator';
+import { ShortcutsDialog } from './shortcuts-dialog';
 import { ThemeSwitch } from './theme-switch';
 
 interface NavItem {
@@ -32,7 +44,7 @@ interface NavItem {
   end?: boolean;
 }
 
-const AUDIT: NavItem[] = [
+const WORK: NavItem[] = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/findings', label: 'Findings', icon: ListChecks },
   { to: '/repositories', label: 'Repositories', icon: FolderGit2 },
@@ -40,15 +52,7 @@ const AUDIT: NavItem[] = [
 
 const OPERATE: NavItem[] = [
   { to: '/runs', label: 'Runs', icon: Activity },
-  { to: '/usage', label: 'Usage', icon: ChartColumn },
-];
-
-const TITLES: [RegExp, string][] = [
-  [/^\/findings/, 'Findings'],
-  [/^\/repositories/, 'Repositories'],
-  [/^\/runs/, 'Runs'],
-  [/^\/usage/, 'Usage'],
-  [/^\/$/, 'Overview'],
+  { to: '/insights', label: 'Insights', icon: ChartColumn },
 ];
 
 function NavGroup({ label, items, badges }: { label: string; items: NavItem[]; badges: Record<string, React.ReactNode> }) {
@@ -84,11 +88,20 @@ const CONNECTION: Record<Connection, [string, string]> = {
   down: ['Reconnecting…', 'bg-destructive'],
 };
 
+function ConnectionStatus() {
+  const [text, dot] = CONNECTION[useConnection()];
+  return (
+    <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:justify-center">
+      <span aria-hidden className={cn('size-2 shrink-0 rounded-full', dot)} />
+      <span className="truncate group-data-[collapsible=icon]:hidden">{text}</span>
+    </div>
+  );
+}
+
+// The sidebar never waits for the overview: its badges appear once it has loaded.
 function AppSidebar() {
-  const { data } = useOverview();
-  const { connection, live } = useLive();
-  const open = data?.findings.filter((f) => f.status === 'open').length;
-  const [connectionText, connectionDot] = CONNECTION[connection];
+  const { data: triage } = useQuery({ ...overviewQuery, select: triageCount });
+  const running = useRun().active;
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
@@ -107,53 +120,72 @@ function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavGroup label="Audit" items={AUDIT} badges={{ '/findings': open || null }} />
-        <NavGroup label="Operate" items={OPERATE} badges={{ '/runs': live.active ? <span className="size-2 animate-pulse rounded-full bg-info" /> : null }} />
+        <NavGroup label="Work" items={WORK} badges={{ '/findings': triage ? <span title={`${triage} in Triage`}>{triage}</span> : null }} />
+        <NavGroup
+          label="Operate"
+          items={OPERATE}
+          badges={{ '/runs': running ? <span role="img" aria-label="Run in progress" className="size-2 animate-pulse rounded-full bg-info" /> : null }}
+        />
       </SidebarContent>
       <SidebarFooter>
-        <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground group-data-[collapsible=icon]:justify-center">
-          <span aria-hidden className={cn('size-2 shrink-0 rounded-full', connectionDot)} />
-          <span className="truncate group-data-[collapsible=icon]:hidden">{connectionText}</span>
-        </div>
+        <ConnectionStatus />
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );
 }
 
-function RunIndicator() {
-  const { live } = useLive();
-  if (!live.active) return null;
+function PageLoading() {
   return (
-    <Badge asChild variant="outline" className="gap-1.5 border-info/40 text-info">
-      <Link to="/runs">
-        <span className="size-1.5 animate-pulse rounded-full bg-info" />
-        Audit running{live.current ? ` · ${live.current}` : ''}
-      </Link>
-    </Badge>
+    <Page>
+      <LoadingPage />
+    </Page>
   );
 }
 
 export function AppLayout() {
-  const { pathname } = useLocation();
-  const title = TITLES.find(([re]) => re.test(pathname))?.[1] ?? 'RepoScout';
+  const [palette, setPalette] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
+  useHotkeys({ palette: () => setPalette((o) => !o), help: () => setShortcuts(true) }, { chord: ['palette'] });
+
   return (
-    <SidebarProvider>
-      <AppSidebar />
-      <SidebarInset className="h-svh overflow-hidden">
-        <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
-          <span className="text-sm font-medium">{title}</span>
-          <div className="ml-auto flex items-center gap-2">
-            <RunIndicator />
-            <ThemeSwitch />
-          </div>
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <Outlet />
-        </div>
-      </SidebarInset>
-    </SidebarProvider>
+    <NewAuditProvider>
+      <SidebarProvider>
+        <AppSidebar />
+        <SidebarInset className="h-svh overflow-hidden">
+          <header className="sticky top-0 z-10 flex h-12 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur">
+            <SidebarTrigger className="-ml-1" />
+            <Separator orientation="vertical" className="mr-1 data-[orientation=vertical]:h-4" />
+            <Breadcrumbs />
+            <div className="ml-auto flex items-center gap-2">
+              <RunIndicator />
+              <Button variant="outline" size="sm" className="hidden gap-2 text-muted-foreground md:inline-flex" onClick={() => setPalette(true)}>
+                <Search />
+                Search or jump to…
+                <Kbd>Ctrl K</Kbd>
+              </Button>
+              <Button variant="ghost" size="icon-sm" className="md:hidden" aria-label="Open the command palette" onClick={() => setPalette(true)}>
+                <Search />
+              </Button>
+              <ThemeSwitch />
+            </div>
+          </header>
+          <main className="min-h-0 flex-1 overflow-y-auto">
+            <Suspense fallback={<PageLoading />}>
+              <Outlet />
+            </Suspense>
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
+      <CommandPalette
+        open={palette}
+        onOpenChange={setPalette}
+        onShowShortcuts={() => {
+          setPalette(false);
+          setShortcuts(true);
+        }}
+      />
+      <ShortcutsDialog open={shortcuts} onOpenChange={setShortcuts} />
+    </NewAuditProvider>
   );
 }

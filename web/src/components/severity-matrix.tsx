@@ -3,9 +3,9 @@ import { CategoryLabel } from '@/components/category';
 import { KIND_ICON } from '@/components/kind';
 import { SeverityDot } from '@/components/severity';
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { findingsHref } from '@/hooks/use-finding-filters';
 import { KIND_LABEL, SEVERITIES } from '@/lib/domain';
-import { type MatrixAxis, type MatrixRow, severityMatrix } from '@/lib/findings';
+import { findingsHref } from '@/lib/findings-view';
+import { type MatrixAxis, type MatrixRow, severityMatrix } from '@/lib/selectors';
 import type { FindingView, Severity } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
@@ -32,20 +32,17 @@ function RowLabel({ row }: { row: MatrixRow }) {
 
 const rowName = (row: MatrixRow) => (row.by === 'category' ? row.key : row.key === 'unset' ? 'unclassified' : row.key);
 
-// Open findings by category or by type, and severity; every number opens the findings it counts.
-export function SeverityMatrix({
-  findings,
-  repo,
-  status = 'open',
-  by = 'category',
-}: {
-  findings: FindingView[];
-  repo?: string;
-  status?: string;
-  by?: MatrixAxis;
-}) {
+// Open findings by category or by type, and severity; every number opens the open findings it counts.
+export function SeverityMatrix({ findings, repo = null, by = 'category' }: { findings: FindingView[]; repo?: string | null; by?: MatrixAxis }) {
   const m = severityMatrix(findings, by);
-  const href = (row: MatrixRow, severity?: string) => findingsHref({ status: status === 'open' ? undefined : status, repo, severity, [row.by]: row.key });
+  const href = (row: MatrixRow, severity?: Severity) =>
+    findingsHref({
+      queue: 'all',
+      statuses: ['open'],
+      repo,
+      severities: severity ? [severity] : [],
+      ...(row.by === 'category' ? { categories: [row.key] } : { kinds: [row.key] }),
+    });
   return (
     <Table>
       <TableHeader>

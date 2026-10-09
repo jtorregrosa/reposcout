@@ -139,7 +139,7 @@ The mode labels move to `MODE_LABEL` in `web/src/lib/domain.ts` as the plain wor
 Validate and Review speculative from Triage, the Overview or a repository use `RunLaunchDialog`. It states:
 - the repositories, computed from the scope;
 - how many findings will be tried, with the CLI caps of 10 per repository for validate and 30 for speculative;
-- that the pass spends subscription usage and stops at the session limit.
+- that the pass spends subscription usage, and, for a validation pass, that it stops before the 5-hour window passes 90% (a speculative review has no such stop).
 
 It then posts the same `startRun` body New audit posts.
 

@@ -1,17 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { Milestone } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { api } from '@/lib/api';
 import { STAGE_HELP, STAGE_LABEL, STAGE_SOURCE_LABEL } from '@/lib/domain';
 import { formatDateTime } from '@/lib/format';
+import { stageHistoryQuery } from '@/lib/queries';
 import { stageTimeline } from '@/lib/stages';
 import type { FindingView } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
-export const stagesKey = (repo: string, fingerprint: string) => ['finding-stages', repo, fingerprint] as const;
-
 export function StageTimeline({ finding: f }: { finding: FindingView }) {
-  const { data, isLoading, error } = useQuery({ queryKey: stagesKey(f.repo, f.fingerprint), queryFn: () => api.stageHistory(f.repo, f.fingerprint) });
+  const { data, isLoading, error } = useQuery(stageHistoryQuery(f));
   const steps = stageTimeline(data ?? [], f.stage);
   return (
     <section className="space-y-2" aria-labelledby="stage-title">

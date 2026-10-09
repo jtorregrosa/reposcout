@@ -1,9 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/lib/api';
+import { useSuspenseQuery } from '@tanstack/react-query';
+import { overviewQuery } from '@/lib/queries';
+import type { Overview } from '@/lib/types';
 
-export const OVERVIEW_KEY = ['overview'] as const;
+export function useOverview(): Overview {
+  return useSuspenseQuery(overviewQuery).data;
+}
 
-// Refreshed by the live stream whenever state/ or repos.yaml changes, so it never polls.
-export function useOverview() {
-  return useQuery({ queryKey: OVERVIEW_KEY, queryFn: api.overview, staleTime: Number.POSITIVE_INFINITY });
+// Re-renders the caller only when the selected slice changes; pass a stable `select`.
+export function useOverviewSelect<T>(select: (ov: Overview) => T): T {
+  return useSuspenseQuery({ ...overviewQuery, select }).data;
 }

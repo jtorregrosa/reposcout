@@ -17,6 +17,10 @@
   --color-warning: var(--warning);
   --color-info: var(--info);
   --color-speculative: var(--speculative);
+  --color-stage-detected: var(--stage-detected);
+  --color-stage-validated: var(--stage-validated);
+  --color-stage-reported: var(--stage-reported);
+  --color-stage-fixed: var(--stage-fixed);
   --font-mono: "Geist Mono Variable", ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -99,6 +103,10 @@
   --warning: oklch(0.65 0.15 70);
   --info: oklch(0.55 0.17 255);
   --speculative: oklch(0.55 0.17 300);
+  --stage-detected: oklch(0.62 0.15 65);
+  --stage-validated: oklch(0.55 0.11 195);
+  --stage-reported: oklch(0.55 0.17 255);
+  --stage-fixed: oklch(0.55 0.14 155);
   /* The brand mark (src/lib/brand.ts, docs/brand/). Brand values, not theme tokens: they stay as the guide fixes them. */
   --mark-hat: #2f5bd3;
   --mark-dents: #2448ae;
@@ -146,6 +154,10 @@
   --warning: oklch(0.8 0.15 80);
   --info: oklch(0.72 0.14 255);
   --speculative: oklch(0.74 0.14 300);
+  --stage-detected: oklch(0.8 0.14 70);
+  --stage-validated: oklch(0.76 0.11 195);
+  --stage-reported: oklch(0.72 0.14 255);
+  --stage-fixed: oklch(0.75 0.15 155);
   --mark-hat: #5b7fe6;
   --mark-dents: #3f64cf;
   --mark-band: #c9b37e;
