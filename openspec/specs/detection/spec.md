@@ -2,9 +2,7 @@
 
 ## Purpose
 Detection is stage 1 of the roadmap: the `/audit` Claude session that turns a manifest of selected files into a raw findings file. It covers the manifest the CLI hands the session, how specialists and the verifier divide the judgement, the speculative review mode, the models and limits each role runs with, and the shape of the raw findings file. What the CLI does with that file afterwards belongs to finding-intake and finding-lifecycle; which files are selected belongs to file-selection, and tool permissions and read scopes belong to audit-security.
-
 ## Requirements
-
 ### Requirement: Session invocation
 For each repository to audit, the CLI SHALL run one Claude session as `claude -p "/audit <clone> <range> <mode> <manifest>"`, where range is `<base>..<head>` in incremental mode and the head commit otherwise, mode is `incremental`, `full` or `speculative`, and the manifest is `reports/<date>/.work/<run-id>/<repo>/manifest.json`.
 
@@ -51,7 +49,7 @@ The manifest's `known_findings` SHALL list every open finding whose file is amon
 - **THEN** it is not in `known_findings`
 
 ### Requirement: Known false positives in the manifest
-The manifest's `known_false_positives` SHALL hold at most the 20 most recently dismissed findings of the selected analyzers: suppressed ones, including a suppression added to `repos.yaml` since the last run, with the reason from `repos.yaml`, and refuted speculative candidates with their refutation; each has title, file, category, snippet, `dismissed_as` and reason, redacted and cut to 300 characters.
+The manifest's `known_false_positives` SHALL hold at most the 20 most recently dismissed findings of the selected analyzers: suppressed ones, including a suppression added to `repos.yaml` since the last run, with the reason from `repos.yaml`, and refuted ones with their refutation, whether a review or an auditor refuted a speculative candidate or an auditor refuted an open finding; each has title, file, category, snippet, `dismissed_as` and reason, redacted and cut to 300 characters.
 
 #### Scenario: More than 20 dismissed findings
 - **WHEN** a repository has 25 suppressed or refuted findings in the selected analyzers' categories
@@ -60,6 +58,10 @@ The manifest's `known_false_positives` SHALL hold at most the 20 most recently d
 #### Scenario: New suppression not yet applied
 - **WHEN** a fingerprint was added under `suppressed` in `repos.yaml` after the last run
 - **THEN** it is listed with `dismissed_as` `suppressed` and the reason from `repos.yaml`
+
+#### Scenario: Open finding refuted by an auditor
+- **WHEN** an auditor refuted an open finding of an analyzer the next audit runs
+- **THEN** the manifest lists it with `dismissed_as` `refuted` and the auditor's resolution as reason
 
 ### Requirement: Owner facts in the manifest
 The manifest's `owner_facts` SHALL carry the repository's `facts` from `repos.yaml`, the defaults' facts first, each redacted, and the session MUST pass them verbatim to every specialist and to the verifier as trusted statements from the repository's owner.
@@ -260,3 +262,4 @@ When each Claude session starts, the CLI SHALL compute `prompt_version` as the f
 #### Scenario: Line endings only
 - **WHEN** the prompts are checked out with CRLF instead of LF line endings
 - **THEN** `prompt_version` is unchanged
+

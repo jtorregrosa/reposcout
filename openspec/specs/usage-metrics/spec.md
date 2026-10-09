@@ -2,9 +2,7 @@
 
 ## Purpose
 Defines what RepoScout records about each Claude run and what it derives from it: the usage row per run (with the prompt version defined by the detection capability), usage-limit detection, precision of what people kept, yield and cost per analyzer, cost per finding, and the subscription budget estimate that sweeps and backfills consult. How the Usage page lays these out belongs to the dashboard capability, and when a sweep stops belongs to audit-run.
-
 ## Requirements
-
 ### Requirement: Usage recorded for every Claude run
 RepoScout SHALL record one usage row in `state/reposcout.db` for every audit's Claude session that ran, whether it succeeded, failed, timed out or hit the usage limit, with date and time, repository, mode, analyzers, number of files, whether it succeeded, the terminal reason, the run id, the prompt version and the specialists model.
 
@@ -49,7 +47,7 @@ RepoScout SHALL treat a Claude session as having hit the subscription usage limi
 - **THEN** it is not treated as having hit the usage limit
 
 ### Requirement: Precision definitions
-Precision SHALL count a finding as kept when it reached open at some point (resolved later still counts) and is not suppressed or refuted, and as dismissed when it is suppressed or was refuted after being speculative; precision is kept / (kept + dismissed), and candidates still speculative count in neither. Suppressions are read from `repos.yaml`, so a pending suppression counts already.
+Precision SHALL count a finding as kept when it reached open at some point (resolved later still counts) and is not suppressed or refuted, and as dismissed when it is suppressed or refuted, whether it was refuted as a speculative candidate or, by an auditor, as an open finding; precision is kept / (kept + dismissed), and candidates still speculative count in neither. Suppressions are read from `repos.yaml`, so a pending suppression counts already.
 
 #### Scenario: Resolved finding
 - **WHEN** a finding was open and later resolved
@@ -58,6 +56,10 @@ Precision SHALL count a finding as kept when it reached open at some point (reso
 #### Scenario: Pending suppression
 - **WHEN** an auditor suppresses a finding in `repos.yaml` and no run has updated the database since
 - **THEN** precision counts it as dismissed
+
+#### Scenario: Open finding refuted by an auditor
+- **WHEN** an auditor refutes a finding the verifier had confirmed
+- **THEN** precision counts it as dismissed for the run that first recorded it
 
 ### Requirement: Precision dimensions and samples
 Precision SHALL be given per analyzer, per specialists model and per prompt version, over every finding people have judged, optionally for one repository; each finding counts for the run that first recorded it, findings with no such run show as not recorded, counts stay beside each percentage, and a row with fewer than 10 judged findings is marked.
@@ -126,3 +128,4 @@ Before each sweep pass or backfill batch, RepoScout SHALL take the latest subscr
 #### Scenario: Status not allowed
 - **WHEN** the latest reading's status does not start with `allowed`
 - **THEN** the next pass is not started
+

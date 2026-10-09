@@ -120,4 +120,35 @@ describe('e2e: run', { timeout: 90_000 }, () => {
     assert.equal(report().usage.num_turns, 9);
     assert.ok(existsSync(join(home.reportsDir(), 'summary.md')));
   });
+
+  it('keeps a finding an auditor refuted out of later reports, and tells the auditors it is a false positive', async () => {
+    home = createHome();
+    const origin = home.createRepo('demo', SOURCES);
+    home.writeConfig([{ name: 'demo', path: origin }]);
+    home.scenario({ default: FINDS_BOTH });
+    assert.equal((await home.run(['run'])).code, 0);
+
+    home.store((s) => {
+      const [fp] = Object.entries(s.readRepoState('demo')?.findings ?? {}).find(([, e]) => e.finding.title === TOKEN_BUG.title) ?? [];
+      assert.ok(fp);
+      s.decide('demo', fp, { verdict: 'refuted', reason: 'the token is a public test key', decided_by: 'jorge', decided_at: new Date().toISOString() });
+    });
+
+    const again = await home.run(['run', '--mode', 'full']);
+    assert.equal(again.code, 0, again.stderr);
+    assert.deepEqual(
+      report().findings.map((f) => [f.title, f.status]),
+      [[LOOP_BUG.title, 'existing']],
+    );
+    // The day's summary still lists the first run's two new findings; the second run adds none and leaves one open.
+    assert.match(readFileSync(join(home.reportsDir(), 'summary.md'), 'utf8'), /\*\*2 new\*\*, \*\*0 resolved\*\*, 1 open in total/);
+    assert.deepEqual(statuses().sort(), [`${LOOP_BUG.title}: open`, `${TOKEN_BUG.title}: refuted`]);
+    assert.deepEqual(
+      home
+        .calls()
+        .filter((c) => c.kind === 'audit')
+        .at(-1)?.false_positives,
+      [TOKEN_BUG.title],
+    );
+  });
 });

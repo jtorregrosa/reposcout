@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { writeJson } from '../fs.js';
+import type { Decision } from '../state/types.js';
 import type { Snapshot, Store } from './store.js';
 
 // The export format is versioned apart from the schema, so an export restores into a newer RepoScout.
@@ -91,9 +92,10 @@ const groupBy = <T>(rows: T[], key: (row: T) => string) => {
 export function restoreExport(store: Store, dir: string): RestoreSummary {
   const manifest = readManifest(dir);
   return store.transaction(() => {
-    const decisions = read<Snapshot['decisions']>(dir, 'decisions.json');
+    // An export from before decisions recorded their status holds only decisions on speculative candidates.
+    const decisions = read<(Omit<Snapshot['decisions'][number], 'decided_on'> & Partial<Pick<Decision, 'decided_on'>>)[]>(dir, 'decisions.json');
     const labels = read<Snapshot['labels']>(dir, 'labels.json');
-    for (const { repo, fingerprint, ...d } of decisions) store.restoreDecision(repo, fingerprint, d);
+    for (const { repo, fingerprint, decided_on = 'speculative', ...d } of decisions) store.restoreDecision(repo, fingerprint, { ...d, decided_on });
     for (const { repo, fingerprint, ...o } of labels) store.restoreLabels(repo, fingerprint, o);
 
     const history = groupBy(read<Snapshot['history']>(dir, 'finding-history.json'), (e) => e.repo);

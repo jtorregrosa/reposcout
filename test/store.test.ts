@@ -183,8 +183,9 @@ describe('lifecycle stages', () => {
   it('gives every finding in an older database its initial stage, recorded as an upgrade', () => {
     const file = join(tempRoot(), 'old.db');
     const old = new Database(file);
-    old.exec(MIGRATIONS.slice(0, -1).join('\n'));
-    old.pragma(`user_version = ${MIGRATIONS.length - 1}`);
+    const stages = MIGRATIONS.findIndex((m) => m.includes('CREATE TABLE finding_stages'));
+    old.exec(MIGRATIONS.slice(0, stages).join('\n'));
+    old.pragma(`user_version = ${stages}`);
     const insert = old.prepare(
       `INSERT INTO findings (repo, fingerprint, status, severity, category, file, first_seen, last_seen, finding)
        VALUES ('demo', ?, ?, 'high', 'logic', 'src/a.cs', 't0', 't0', ?)`,

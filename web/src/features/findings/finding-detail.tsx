@@ -99,7 +99,13 @@ function DuplicateNotice({ finding }: { finding: FindingView }) {
   );
 }
 
-// Who decided this candidate and why, with a way back if the decision was wrong.
+const WITHDRAWN: Record<'speculative' | 'open-confirmed' | 'open-refuted', string> = {
+  speculative: 'The candidate goes back to speculative, and the next speculative review looks at it again.',
+  'open-confirmed': 'The finding stays open and returns to the stage it had before the confirmation.',
+  'open-refuted': 'The finding goes back to open, and later audits report it again while they still find it.',
+};
+
+// Who decided this finding and why, with a way back if the decision was wrong.
 function DecisionNotice({ finding }: { finding: FindingView }) {
   const undo = useAction('undecide');
   const d = finding.decision;
@@ -124,7 +130,7 @@ function DecisionNotice({ finding }: { finding: FindingView }) {
             <AlertDialogHeader>
               <AlertDialogTitle>Withdraw this decision?</AlertDialogTitle>
               <AlertDialogDescription>
-                The candidate goes back to speculative, and the next speculative review looks at it again. The withdrawal is recorded in its history.
+                {WITHDRAWN[d.decided_on === 'open' ? (`open-${d.verdict}` as const) : 'speculative']} The withdrawal is recorded in its history.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -177,7 +183,9 @@ export function FindingDetail({ finding: f, position, onPrevious, onNext, onClos
   const [deciding, setDeciding] = useState<Verdict | null>(null);
   const open = useAction('openInEditor');
   const canSuppress = f.status === 'open';
-  const canDecide = f.status === 'speculative';
+  const undecided = !f.decision;
+  const canConfirm = undecided && (f.status === 'speculative' || (f.status === 'open' && f.stage === 'detected'));
+  const canRefute = undecided && (f.status === 'speculative' || f.status === 'open');
 
   return (
     <article aria-labelledby="finding-title" className={cn('flex h-full min-w-0 flex-col border-l-4', severityBorder(f.severity))}>
@@ -235,17 +243,17 @@ export function FindingDetail({ finding: f, position, onPrevious, onNext, onClos
               <ClipboardCopy />
               Copy for a ticket
             </Button>
-            {canDecide ? (
-              <>
-                <Button size="sm" variant="outline" onClick={() => setDeciding('confirmed')}>
-                  <CircleCheck />
-                  Confirm…
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setDeciding('refuted')}>
-                  <CircleX />
-                  Refute…
-                </Button>
-              </>
+            {canConfirm ? (
+              <Button size="sm" variant="outline" onClick={() => setDeciding('confirmed')}>
+                <CircleCheck />
+                Confirm…
+              </Button>
+            ) : null}
+            {canRefute ? (
+              <Button size="sm" variant="outline" onClick={() => setDeciding('refuted')}>
+                <CircleX />
+                Refute…
+              </Button>
             ) : null}
             {canSuppress ? (
               <Button size="sm" variant="outline" onClick={() => setSuppressing(true)}>
@@ -344,7 +352,7 @@ export function FindingDetail({ finding: f, position, onPrevious, onNext, onClos
       </div>
 
       {canSuppress ? <SuppressDialog finding={f} open={suppressing} onOpenChange={setSuppressing} /> : null}
-      {canDecide ? <DecideDialog finding={f} verdict={deciding} onOpenChange={(open) => !open && setDeciding(null)} /> : null}
+      {canConfirm || canRefute ? <DecideDialog finding={f} verdict={deciding} onOpenChange={(open) => !open && setDeciding(null)} /> : null}
     </article>
   );
 }

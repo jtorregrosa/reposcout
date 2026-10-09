@@ -74,12 +74,16 @@ export interface FindingEvent {
 
 export type TriageVerdict = 'confirmed' | 'refuted';
 
-// An auditor's decision on a speculative candidate.
+export type DecidedOn = 'speculative' | 'open';
+
+// An auditor's decision on a speculative candidate or an open finding.
 export interface Decision {
   verdict: TriageVerdict;
   reason: string;
   decided_by: string;
   decided_at: string;
+  // The status the finding had when it was decided, which undoing the decision returns it to.
+  decided_on: DecidedOn;
 }
 
 // What an auditor set by hand on a finding's labels. A field left null keeps what the audit said.

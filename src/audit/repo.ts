@@ -20,6 +20,7 @@ import { redactDeep } from '../security/secrets.js';
 import { type Candidate, selectFiles } from '../selection/select.js';
 import { auditedByAnalyzer, auditsByAnalyzer, lastAuditedFor, recordAudits, unreadOnceByAnalyzer } from '../state/coverage.js';
 import type { RepoState } from '../state/types.js';
+import type { Store } from '../store/index.js';
 import type { AuditOptions, RepoOutcome, RunContext } from './context.js';
 import { buildManifest, knownFalsePositives, knownFindings } from './manifest.js';
 import { planAudit } from './plan.js';
@@ -32,6 +33,8 @@ const MAX_DIFF_BYTES = 600_000;
 const isPlainCounts = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 const suppressionsOf = (repo: RepoConfig) => new Map(repo.suppressed.map((s) => [s.fingerprint, s.reason.trim()]));
+const refutedByAuditorIn = (store: Store, repo: string) =>
+  new Set([...store.decisionsFor(repo)].filter(([, d]) => d.decided_on === 'open' && d.verdict === 'refuted').map(([fp]) => fp));
 
 function scmAuthHeader(repo: RepoConfig): string | null {
   if (repo.provider === 'local') return null;
@@ -174,6 +177,7 @@ export async function auditRepo({ repo, opts, ctx }: { repo: RepoConfig; opts: A
         reviews: [],
         runAt,
         suppressed: suppressionsOf(repo),
+        refutedByAuditor: refutedByAuditorIn(ctx.store, repo.name),
         auditedCategories: analyzers,
       });
       const { file_audits: _legacy, ...rest } = previous ?? ({} as Partial<RepoState>);
@@ -290,6 +294,7 @@ export async function auditRepo({ repo, opts, ctx }: { repo: RepoConfig; opts: A
     reviews: Array.isArray(raw.known_findings_review) ? raw.known_findings_review : [],
     runAt,
     suppressed: suppressionsOf(repo),
+    refutedByAuditor: refutedByAuditorIn(ctx.store, repo.name),
     auditedCategories: analyzers,
     readByCategory: reads.byCategory,
   });

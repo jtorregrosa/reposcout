@@ -148,3 +148,25 @@ describe('withdrawing an auditor confirmation', () => {
     assert.equal(withdrawnStage(at('validated', 'reproduced'), entry('speculative'), {}), null);
   });
 });
+
+describe('an auditor confirmation of an open finding', () => {
+  it('validates it when it is detected', () => {
+    assert.deepEqual(nextStage({ current: at('detected'), previousStatus: 'open', entry: entry('open'), confirmedByAuditor: true }), {
+      stage: 'validated',
+      source: 'auditor',
+      note: null,
+    });
+  });
+
+  it('returns it to detected when withdrawn, while it stays open', () => {
+    assert.deepEqual(withdrawnStage(at('validated', 'auditor'), entry('open'), { beforeAuditor: 'detected' }), {
+      stage: 'detected',
+      source: 'withdrawn',
+      note: null,
+    });
+  });
+
+  it('keeps it validated when withdrawn after a test reproduced it', () => {
+    assert.equal(withdrawnStage(at('validated', 'auditor'), entry('open', true), { beforeAuditor: 'detected' }), null);
+  });
+});

@@ -48,7 +48,14 @@ if (!manifestPath || !existsSync(manifestPath)) {
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const scenario = process.env.FAKE_CLAUDE_SCENARIO ? JSON.parse(readFileSync(process.env.FAKE_CLAUDE_SCENARIO, 'utf8')) : {};
 const behaviour = { behaviour: 'findings', ...(scenario.default ?? {}), ...(scenario.repos?.[manifest.repo] ?? {}) };
-log({ kind: resumed ? 'resume' : 'audit', repo: manifest.repo, mode: manifest.mode, behaviour: behaviour.behaviour, files: manifest.files.map((f) => f.path) });
+log({
+  kind: resumed ? 'resume' : 'audit',
+  repo: manifest.repo,
+  mode: manifest.mode,
+  behaviour: behaviour.behaviour,
+  files: manifest.files.map((f) => f.path),
+  false_positives: (manifest.known_false_positives ?? []).map((f) => f.title),
+});
 
 const emit = (msg) => process.stdout.write(`${JSON.stringify({ session_id: sessionId, ...msg })}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { appendFileSync, mkdtempSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'vitest';
@@ -12,6 +12,7 @@ import { Store } from '../src/store/index.js';
 const CONFIRMED = 'a'.repeat(32);
 const RELABELLED = 'b'.repeat(32);
 const FIXED = 'c'.repeat(32);
+const REFUTED = 'd'.repeat(32);
 
 const entry = (fingerprint: string, over: Partial<FindingEntry> = {}): FindingEntry =>
   ({
@@ -28,10 +29,19 @@ function populated(): Store {
   const reproduced = { ...entry(FIXED).finding, verified: true };
   store.writeRepoState(
     'demo',
-    state({ [CONFIRMED]: entry(CONFIRMED, { status: 'speculative' }), [RELABELLED]: entry(RELABELLED), [FIXED]: entry(FIXED, { finding: reproduced }) }, 't1'),
+    state(
+      {
+        [CONFIRMED]: entry(CONFIRMED, { status: 'speculative' }),
+        [RELABELLED]: entry(RELABELLED),
+        [FIXED]: entry(FIXED, { finding: reproduced }),
+        [REFUTED]: entry(REFUTED),
+      },
+      't1',
+    ),
     { runId: 'run-1', at: 't1' },
   );
   store.decide('demo', CONFIRMED, { verdict: 'confirmed', reason: 'seen in production', decided_by: 'jorge', decided_at: 't2' });
+  store.decide('demo', REFUTED, { verdict: 'refuted', reason: 'the input is validated upstream', decided_by: 'jorge', decided_at: 't2' });
   store.setLabels('demo', RELABELLED, { kind: 'chore' }, 'jorge', 't2');
   const now = store.readRepoState('demo') as RepoState;
   store.writeRepoState(
@@ -71,7 +81,7 @@ describe('an export restored into an empty database', () => {
 
     assert.equal(summary.repos, 1);
     assert.deepEqual(restored.readRepoState('demo'), source.readRepoState('demo'));
-    for (const fp of [CONFIRMED, RELABELLED, FIXED]) {
+    for (const fp of [CONFIRMED, RELABELLED, FIXED, REFUTED]) {
       assert.deepEqual(restored.findingHistory('demo', fp), source.findingHistory('demo', fp), `status history of ${fp[0]}`);
       assert.deepEqual(restored.stageHistory('demo', fp), source.stageHistory('demo', fp), `stage history of ${fp[0]}`);
     }
@@ -85,6 +95,23 @@ describe('an export restored into an empty database', () => {
     assert.deepEqual(restored.failuresFor('2026-10-08'), source.failuresFor('2026-10-08'));
     assert.equal(restored.findingHistory('demo', CONFIRMED).at(-1)?.actor, 'jorge');
     assert.equal(restored.stagesFor('demo').get(FIXED)?.stage, 'fixed');
+    assert.equal(restored.decisionsFor('demo').get(REFUTED)?.decided_on, 'open');
+    assert.equal(restored.readRepoState('demo')?.findings[REFUTED]?.status, 'refuted');
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('restores the decisions of an export from before they recorded their status as made on speculative', () => {
+    const dir = tempDir();
+    writeExport(populated(), dir, 't4');
+    const file = join(dir, 'decisions.json');
+    const older = (JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>[]).map(({ decided_on: _on, ...d }) => d);
+    writeFileSync(file, JSON.stringify(older));
+    const restored = new Store(':memory:');
+    restoreExport(restored, dir);
+    assert.deepEqual(
+      [...restored.decisionsFor('demo').values()].map((d) => d.decided_on),
+      ['speculative', 'speculative'],
+    );
     rmSync(dir, { recursive: true, force: true });
   });
 

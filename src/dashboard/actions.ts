@@ -118,7 +118,13 @@ export function auditorName(): string {
   }
 }
 
-const DECISION_STATUS: Record<DecisionError['kind'], number> = { 'not-found': 404, 'not-speculative': 409, 'no-decision': 404 };
+const DECISION_STATUS: Record<DecisionError['kind'], number> = {
+  'not-found': 404,
+  'not-decidable': 409,
+  'already-decided': 409,
+  'already-validated': 409,
+  'no-decision': 404,
+};
 
 function asActionError<T>(fn: () => T): T {
   try {
@@ -129,8 +135,9 @@ function asActionError<T>(fn: () => T): T {
   }
 }
 
-// An auditor settles a speculative candidate the verifier could not: confirmed, it becomes an open finding;
-// refuted, it leaves the queue. Recorded with the reason, the auditor and the time, and kept across runs.
+// An auditor settles a speculative candidate the verifier could not, or judges an open finding it confirmed from the
+// code alone: confirmed, it is validated; refuted, it leaves the queue. Recorded with the reason, the auditor and the
+// time, and kept across runs.
 export function decideSpeculative(
   {
     root,

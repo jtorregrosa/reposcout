@@ -267,6 +267,49 @@ describe('suppression', () => {
   });
 });
 
+describe('a finding an auditor refuted', () => {
+  const runAt = '2026-10-07T00:00:00.000Z';
+  const refuted = { status: 'refuted', first_seen: 't0', last_seen: 't0', refuted_at: 't1', resolution: 'Refuted by jorge: not a bug', finding: finding() };
+  const run = (refutedByAuditor: Set<string>, findings: Finding[] = [], speculative: Finding[] = []) =>
+    classify({
+      findings,
+      speculative,
+      previous: state({ fp1: refuted }),
+      auditedFiles: ['src/a.cs'],
+      deletedFiles: [],
+      reviews: [],
+      runAt,
+      refutedByAuditor,
+      readByCategory: new Map([['logic', new Set(['src/a.cs'])]]),
+    });
+
+  it('stays refuted and unreported when the verifier confirms it again', () => {
+    const { reported, nextState } = run(new Set(['fp1']), [finding()]);
+    assert.deepEqual(reported, []);
+    assert.equal(nextState.fp1.status, 'refuted');
+    assert.equal(nextState.fp1.resolution, 'Refuted by jorge: not a bug');
+    assert.equal(nextState.fp1.last_seen, runAt);
+  });
+
+  it('stays refuted when a run reproduces it', () => {
+    const { reported, nextState } = run(new Set(['fp1']), [finding({ verified: true })]);
+    assert.deepEqual(reported, []);
+    assert.equal(nextState.fp1.status, 'refuted');
+  });
+
+  it('stays refuted when it is raised as speculative', () => {
+    const { speculativeNew, nextState } = run(new Set(['fp1']), [], [finding()]);
+    assert.deepEqual(speculativeNew, []);
+    assert.equal(nextState.fp1.status, 'refuted');
+  });
+
+  it('opens again when only a speculative review or a candidate decision refuted it', () => {
+    const { reported, nextState } = run(new Set(), [finding()]);
+    assert.equal(reported[0]?.status, 'new');
+    assert.equal(nextState.fp1.status, 'open');
+  });
+});
+
 describe('locateSnippet', () => {
   const text = ['using System;', '', 'class A {', '  void Run() {', '    var total = price * qty;', '    Save(total);', '  }', '}'].join('\n');
 
