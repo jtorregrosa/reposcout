@@ -4,6 +4,7 @@ import { ANALYZERS } from '../config/analyzers.js';
 import { loadConfig, type RepoConfig } from '../config/config.js';
 import { errorMessage } from '../errors.js';
 import { layout as layoutOf } from '../paths.js';
+import { verificationState } from '../security/sandbox.js';
 import { auditsByAnalyzer, costPerFile, fullRunPace, fullyAudited } from '../state/coverage.js';
 import { activeRun } from '../state/lock.js';
 import type { Census } from '../state/types.js';
@@ -122,6 +123,7 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
     branch: repo.branch,
     models: repo.claude?.models,
     test_command: !!repo.test_command,
+    verification: verificationState(repo),
     last_commit: state?.last_commit ?? null,
     last_run_at: state?.last_run_at ?? null,
     last_full_run_at: state?.last_full_run_at ?? null,

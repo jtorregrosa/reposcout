@@ -245,11 +245,15 @@ The Repositories page SHALL show coverage across repositories and, per repositor
 - **THEN** coverage counts only the audits made since that instant
 
 ### Requirement: Repository page
-Each repository SHALL have its own page with its type by severity matrix, configuration, coverage per analyzer and recent Claude runs, and a notice that verification is off when it has no `test_command`.
+Each repository SHALL have its own page with its type by severity matrix, configuration, coverage per analyzer and recent Claude runs, and a notice that verification is off whenever the verifier cannot run `test_command` there: when the repository has none, or when the platform has no Claude Code sandbox and the repository does not set `test_command_unsandboxed: true`.
 
 #### Scenario: No test_command
 - **WHEN** a repository has no `test_command`
 - **THEN** its page says verification is off and the verifier confirms findings from the code alone
+
+#### Scenario: test_command on native Windows
+- **WHEN** a repository sets `test_command` without `test_command_unsandboxed` and the dashboard runs on native Windows
+- **THEN** its page says verification is off because there is no sandbox, and names `test_command_unsandboxed: true` as the opt-in
 
 #### Scenario: Unknown repository
 - **WHEN** the auditor opens the page of a name not in repos.yaml
