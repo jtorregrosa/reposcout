@@ -1,5 +1,5 @@
-import { CATEGORIES, KIND_LABEL, KINDS, SEVERITIES, severityRank } from './domain';
-import type { Category, FindingStatus, FindingView, Kind, Severity } from './types';
+import { CATEGORIES, KIND_LABEL, KINDS, SEVERITIES, STAGE_LABEL, STAGES, severityRank } from './domain';
+import type { Category, FindingStatus, FindingView, Kind, Severity, Stage } from './types';
 
 // "new" is a view over open findings, not a status of its own; "all" drops the status filter.
 export type StatusView = 'open' | 'new' | 'speculative' | 'suppressed' | 'resolved' | 'refuted' | 'duplicate' | 'all';
@@ -16,6 +16,7 @@ export interface FindingFilters {
   severities: Severity[];
   categories: Category[];
   kinds: KindFilter[];
+  stages: Stage[];
   personalData: boolean;
   q: string;
   sort: SortKey;
@@ -27,10 +28,33 @@ export const DEFAULT_FILTERS: FindingFilters = {
   severities: [],
   categories: [],
   kinds: [],
+  stages: [],
   personalData: false,
   q: '',
   sort: 'severity',
 };
+
+const list = <T extends string>(raw: string | null, allowed: readonly T[]): T[] =>
+  (raw ?? '').split(',').filter((v): v is T => (allowed as readonly string[]).includes(v));
+
+const SORT_KEYS: SortKey[] = ['severity', 'newest', 'location'];
+
+// Values the URL does not know are dropped, so an old or hand-edited link still opens a valid view.
+export function filtersFromParams(params: URLSearchParams): FindingFilters {
+  const status = params.get('status');
+  const sort = params.get('sort');
+  return {
+    status: STATUS_VIEWS.includes(status as StatusView) ? (status as StatusView) : DEFAULT_FILTERS.status,
+    repo: params.get('repo') || null,
+    severities: list<Severity>(params.get('severity'), SEVERITIES),
+    categories: list<Category>(params.get('category'), CATEGORIES),
+    kinds: list<KindFilter>(params.get('kind'), [...KINDS, 'unset']),
+    stages: list<Stage>(params.get('stage'), STAGES),
+    personalData: params.get('pd') === '1',
+    q: params.get('q') ?? '',
+    sort: SORT_KEYS.includes(sort as SortKey) ? (sort as SortKey) : DEFAULT_FILTERS.sort,
+  };
+}
 
 export function matchesStatus(f: FindingView, view: StatusView): boolean {
   if (view === 'all') return true;
@@ -46,6 +70,7 @@ export function matchesScope(f: FindingView, filters: FindingFilters): boolean {
   if (filters.severities.length && !filters.severities.includes(f.severity)) return false;
   if (filters.categories.length && !filters.categories.includes(f.category)) return false;
   if (filters.kinds.length && !filters.kinds.includes(f.kind ?? 'unset')) return false;
+  if (filters.stages.length && !filters.stages.includes(f.stage)) return false;
   if (filters.personalData && !f.personal_data) return false;
   const q = filters.q.trim().toLowerCase();
   return !q || haystack(f).includes(q);
@@ -100,6 +125,7 @@ export function describeScope(filters: FindingFilters): string {
     filters.severities.length ? `severity: ${filters.severities.join(', ')}` : null,
     filters.kinds.length ? `type: ${filters.kinds.map((k) => (k === 'unset' ? 'not classified' : KIND_LABEL[k])).join(', ')}` : null,
     filters.categories.length ? `category: ${filters.categories.join(', ')}` : null,
+    filters.stages.length ? `stage: ${filters.stages.map((s) => STAGE_LABEL[s].toLowerCase()).join(', ')}` : null,
     filters.personalData ? 'personal data only' : null,
     filters.q ? `search: "${filters.q}"` : null,
   ]

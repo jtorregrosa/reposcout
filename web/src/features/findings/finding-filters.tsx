@@ -1,4 +1,4 @@
-import { ListFilter, RotateCcw, Search, Tag, UserRound } from 'lucide-react';
+import { ListFilter, Milestone, RotateCcw, Search, Tag, UserRound } from 'lucide-react';
 import { forwardRef } from 'react';
 import { KIND_ICON } from '@/components/kind';
 import { SeverityDot } from '@/components/severity';
@@ -17,9 +17,9 @@ import { Kbd } from '@/components/ui/kbd';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Toggle } from '@/components/ui/toggle';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CATEGORIES, CATEGORY_LABEL, KIND_LABEL, KINDS, PERSONAL_DATA_HELP, SEVERITIES } from '@/lib/domain';
+import { CATEGORIES, CATEGORY_LABEL, KIND_LABEL, KINDS, PERSONAL_DATA_HELP, SEVERITIES, STAGE_HELP, STAGE_LABEL, STAGES } from '@/lib/domain';
 import type { FindingFilters, KindFilter, SortKey } from '@/lib/findings';
-import type { Category, Severity } from '@/lib/types';
+import type { Category, Severity, Stage } from '@/lib/types';
 
 const ALL = '__all';
 
@@ -29,13 +29,14 @@ interface Props {
   severityCounts: Partial<Record<Severity, number>>;
   categoryCounts: Partial<Record<Category, number>>;
   kindCounts: Partial<Record<KindFilter, number>>;
+  stageCounts: Partial<Record<Stage, number>>;
   personalDataCount: number;
   onChange: (patch: Partial<FindingFilters>) => void;
   onReset: () => void;
 }
 
 export const FindingFiltersBar = forwardRef<HTMLInputElement, Props>(function FindingFiltersBar(
-  { filters, repos, severityCounts, categoryCounts, kindCounts, personalDataCount, onChange, onReset },
+  { filters, repos, severityCounts, categoryCounts, kindCounts, stageCounts, personalDataCount, onChange, onReset },
   searchRef,
 ) {
   const dirty =
@@ -43,6 +44,7 @@ export const FindingFiltersBar = forwardRef<HTMLInputElement, Props>(function Fi
     filters.severities.length ||
     filters.categories.length ||
     filters.kinds.length ||
+    filters.stages.length ||
     filters.personalData ||
     filters.q ||
     filters.sort !== 'severity';
@@ -143,6 +145,32 @@ export const FindingFiltersBar = forwardRef<HTMLInputElement, Props>(function Fi
             >
               <span className="flex-1">{CATEGORY_LABEL[c]}</span>
               <span className="tabular-nums text-muted-foreground">{categoryCounts[c] ?? 0}</span>
+            </DropdownMenuCheckboxItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm">
+            <Milestone />
+            Stage
+            {filters.stages.length ? <Badge variant="secondary">{filters.stages.length}</Badge> : null}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuLabel>How far it has progressed</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          {STAGES.map((s) => (
+            <DropdownMenuCheckboxItem
+              key={s}
+              checked={filters.stages.includes(s)}
+              title={STAGE_HELP[s]}
+              onSelect={(e) => e.preventDefault()}
+              onCheckedChange={(on) => onChange({ stages: on ? [...filters.stages, s] : filters.stages.filter((x) => x !== s) })}
+            >
+              <span className="flex-1">{STAGE_LABEL[s]}</span>
+              <span className="tabular-nums text-muted-foreground">{stageCounts[s] ?? 0}</span>
             </DropdownMenuCheckboxItem>
           ))}
         </DropdownMenuContent>

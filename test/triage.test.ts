@@ -32,6 +32,45 @@ const speculative = (fingerprint = FP): FindingEntry =>
 const state = (findings: RepoState['findings']): RepoState => ({ repo: 'r', branch: 'main', last_commit: 'abc', findings });
 const decision = (verdict: 'confirmed' | 'refuted', at = 't1') => ({ verdict, reason: 'lists reach 300k rows', decided_by: 'jorge', decided_at: at });
 
+describe('the stage of a decided candidate', () => {
+  it('becomes validated when an auditor confirms it, with the auditor as actor and no run', () => {
+    const store = new Store(':memory:');
+    store.writeRepoState('r', state({ [FP]: speculative() }), { runId: 'run-1', at: 't0' });
+    store.decide('r', FP, decision('confirmed'));
+    assert.deepEqual(store.stagesFor('r').get(FP), { stage: 'validated', source: 'auditor', since: 't1' });
+    const last = store.stageHistory('r', FP).at(-1);
+    assert.equal(last?.from_stage, 'detected');
+    assert.equal(last?.actor, 'jorge');
+    assert.equal(last?.run_id, null);
+  });
+
+  it('stays detected when an auditor refutes it', () => {
+    const store = new Store(':memory:');
+    store.writeRepoState('r', state({ [FP]: speculative() }), { runId: 'run-1', at: 't0' });
+    store.decide('r', FP, decision('refuted'));
+    assert.equal(store.stagesFor('r').get(FP)?.stage, 'detected');
+    assert.equal(store.stageHistory('r', FP).length, 1);
+  });
+
+  it('returns to detected when the confirmation is withdrawn', () => {
+    const store = new Store(':memory:');
+    store.writeRepoState('r', state({ [FP]: speculative() }), { runId: 'run-1', at: 't0' });
+    store.decide('r', FP, decision('confirmed'));
+    store.undecide('r', FP, 'jorge', 't2');
+    assert.deepEqual(store.stagesFor('r').get(FP), { stage: 'detected', source: 'withdrawn', since: 't2' });
+    assert.equal(store.stageHistory('r', FP).at(-1)?.actor, 'jorge');
+  });
+
+  it('is not moved again by a run that re-applies the confirmation', () => {
+    const store = new Store(':memory:');
+    store.writeRepoState('r', state({ [FP]: speculative() }), { runId: 'run-1', at: 't0' });
+    store.decide('r', FP, decision('confirmed'));
+    store.writeRepoState('r', state({ [FP]: { ...speculative(), last_seen: 't2' } }), { runId: 'run-2', at: 't2' });
+    assert.equal(store.stagesFor('r').get(FP)?.stage, 'validated');
+    assert.equal(store.stageHistory('r', FP).length, 2);
+  });
+});
+
 describe('a decision on a speculative candidate', () => {
   it('confirms it as an open finding, and records who and why', () => {
     const store = new Store(':memory:');

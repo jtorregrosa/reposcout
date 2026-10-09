@@ -1,4 +1,4 @@
-import type { FindingEvent, Kind, Overview, RunEvent, StartRunBody } from './types';
+import type { FindingEvent, Kind, Overview, RunEvent, StageEvent, StartRunBody } from './types';
 
 export class ApiError extends Error {
   override name = 'ApiError';
@@ -56,6 +56,8 @@ export const api = {
   runEvents: (runId: string) => getJson<RunEvent[]>(`/api/runs/${encodeURIComponent(runId)}/events`),
   findingHistory: (repo: string, fingerprint: string) =>
     getJson<FindingEvent[]>(`/api/findings/${encodeURIComponent(repo)}/${encodeURIComponent(fingerprint)}/history`),
+  stageHistory: (repo: string, fingerprint: string) =>
+    getJson<StageEvent[]>(`/api/findings/${encodeURIComponent(repo)}/${encodeURIComponent(fingerprint)}/stages`),
   startRun: (body: StartRunBody) => post<{ started: boolean; pid: number | null }>('run', body),
   cancel: () => post<{ cancelling: string }>('cancel'),
   forceStop: () => post<{ killed: string }>('force-stop'),

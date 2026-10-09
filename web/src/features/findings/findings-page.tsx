@@ -69,6 +69,14 @@ export function FindingsPage() {
       ),
     [inStatus, deferred],
   );
+  const stageCounts = useMemo(
+    () =>
+      countBy(
+        inStatus.filter((f) => matchesScope(f, { ...deferred, stages: [] })),
+        (f) => f.stage,
+      ),
+    [inStatus, deferred],
+  );
   const personalDataCount = useMemo(
     () => inStatus.filter((f) => f.personal_data && matchesScope(f, { ...deferred, personalData: false })).length,
     [inStatus, deferred],
@@ -196,6 +204,7 @@ export function FindingsPage() {
           severityCounts={severityCounts}
           categoryCounts={categoryCounts}
           kindCounts={kindCounts}
+          stageCounts={stageCounts}
           personalDataCount={personalDataCount}
           onChange={(patch) => update(patch, { replace: 'q' in patch })}
           onReset={reset}

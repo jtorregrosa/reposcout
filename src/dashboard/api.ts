@@ -1,12 +1,27 @@
 // The dashboard's HTTP contract. The web app imports these types, so a change here fails its typecheck instead
 // of breaking a screen at runtime. Type-only: nothing in this module may have a runtime value.
 import type { Analyzer } from '../config/analyzers.js';
+import type { Stage, StageEvent, StageSource } from '../findings/stage.js';
 import type { Discard, Finding, FindingStatus, Severity } from '../findings/types.js';
 import type { RunResult, YieldRow } from '../report/types.js';
 import type { Decision, FindingEvent, LabelOverride, LockInfo, RateLimit, UsageRow } from '../state/types.js';
 
 export type { Category, Confidence, Kind, Repro } from '../findings/types.js';
-export type { Analyzer, Decision, FindingEvent, FindingStatus, LabelOverride, RateLimit, RunResult, Severity, UsageRow, YieldRow };
+export type {
+  Analyzer,
+  Decision,
+  FindingEvent,
+  FindingStatus,
+  LabelOverride,
+  RateLimit,
+  RunResult,
+  Severity,
+  Stage,
+  StageEvent,
+  StageSource,
+  UsageRow,
+  YieldRow,
+};
 
 // Findings that people kept or dismissed, counted per repository, analyzer, specialist model and prompt version, so
 // the page can add them up along any of those. Kept: reached open (resolved later counts) and not suppressed.
@@ -37,6 +52,9 @@ export interface FindingView extends Finding {
   decision: Decision | null;
   // An auditor's correction of the type or the personal-data mark.
   labels_override: LabelOverride | null;
+  stage: Stage;
+  stage_since: string | null;
+  stage_source: StageSource | null;
 }
 
 export interface DiscardView extends Discard {

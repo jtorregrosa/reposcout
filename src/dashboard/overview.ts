@@ -78,6 +78,7 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
   const configured = new Map((repo.suppressed ?? []).map((s) => [s.fingerprint, s.reason]));
   const decisions = store.decisionsFor(repo.name);
   const labels = store.labelsFor(repo.name);
+  const stages = store.stagesFor(repo.name);
   for (const [fingerprint, entry] of Object.entries(state?.findings ?? {})) {
     let status = entry.status;
     let pending = false;
@@ -103,6 +104,9 @@ function repoRow(store: Store, repo: RepoConfig, census: Census, findings: Findi
       suppressed_reason: status === 'suppressed' ? (configured.get(fingerprint) ?? entry.reason ?? null) : null,
       decision: decisions.get(fingerprint) ?? null,
       labels_override: labels.get(fingerprint) ?? null,
+      stage: stages.get(fingerprint)?.stage ?? 'detected',
+      stage_since: stages.get(fingerprint)?.since ?? null,
+      stage_source: stages.get(fingerprint)?.source ?? null,
     });
   }
 

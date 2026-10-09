@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'vitest';
-import { applyFilters, DEFAULT_FILTERS, describeScope, matchesStatus, severityMatrix } from './findings';
+import { applyFilters, DEFAULT_FILTERS, describeScope, filtersFromParams, matchesScope, matchesStatus, severityMatrix } from './findings';
 import type { FindingView } from './types';
 
 const finding = (over: Partial<FindingView>): FindingView =>
@@ -89,5 +89,34 @@ describe('finding filters', () => {
       ],
     );
     assert.deepEqual(severityMatrix([...labelled, finding({ severity: 'medium' })], 'kind').rows.at(-1)?.cells, [0, 0, 1, 0]);
+  });
+});
+
+describe('the stage filter', () => {
+  const all = [
+    finding({ fingerprint: 'a', stage: 'detected' }),
+    finding({ fingerprint: 'b', stage: 'validated' }),
+    finding({ fingerprint: 'c', stage: 'fixed', status: 'resolved' }),
+  ];
+
+  it('lists only findings at one of the selected stages', () => {
+    const shown = applyFilters(all, { ...DEFAULT_FILTERS, status: 'all', stages: ['validated', 'fixed'] });
+    assert.deepEqual(shown.map((f) => f.fingerprint).sort(), ['b', 'c']);
+  });
+
+  it('narrows the status tab counts too', () => {
+    const scope = { ...DEFAULT_FILTERS, stages: ['validated' as const] };
+    const inScope = all.filter((f) => matchesScope(f, scope));
+    assert.equal(inScope.filter((f) => matchesStatus(f, 'open')).length, 1);
+    assert.equal(inScope.filter((f) => matchesStatus(f, 'resolved')).length, 0);
+  });
+
+  it('is named in the scope of an export', () => {
+    assert.match(describeScope({ ...DEFAULT_FILTERS, stages: ['validated', 'fixed'] }), /stage: validated, fixed/);
+  });
+
+  it('reads its stages from the URL and ignores unknown ones', () => {
+    assert.deepEqual(filtersFromParams(new URLSearchParams('stage=validated,shipped')).stages, ['validated']);
+    assert.deepEqual(filtersFromParams(new URLSearchParams('')).stages, []);
   });
 });
