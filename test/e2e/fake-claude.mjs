@@ -10,7 +10,10 @@
 //   { "behaviour": "findings" | "no-output" | "usage-limit" | "hang" | "slow" | "fail",
 //     "findings": [{ "file", "line", "snippet", "category", "severity"?, "title"? }],
 //     "speculative": [...same, plus "unconfirmed"],
+//     "validation": { "<file>": "reproduced" | "not_reproduced" | "not_testable" },
 //     "five_hour": 0.1, "seven_day": 0.05, "delay_ms": 60000 }
+// A finding is reported with verified: true unless it sets "verified": false. In validate mode the verifier answers each
+// candidate by its file from "validation", and gives no verdict for a file it does not name.
 // "no-output" ends its first session successfully without writing, and writes on the resume. Every call is
 // appended to FAKE_CLAUDE_LOG as a JSON line, so a test can see what was started and when.
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync, writeSync } from 'node:fs';
@@ -140,16 +143,34 @@ const complete = (f, extra = {}) => ({
   ...f,
 });
 
+const validationReview = () =>
+  (manifest.validation_candidates ?? []).flatMap((c) => {
+    const verdict = behaviour.validation?.[c.file];
+    if (!verdict) return [];
+    return [
+      {
+        fingerprint: c.fingerprint,
+        verdict,
+        reason: verdict === 'not_testable' ? 'needs a database the worktree does not have' : `the test ${verdict === 'reproduced' ? 'failed' : 'passed'}`,
+        ...(verdict === 'reproduced' ? { reproduction: 'test/fake.test.ts failed: expected false, got true' } : {}),
+      },
+    ];
+  });
+
 function writeOutput() {
+  const validating = manifest.mode === 'validate';
   // Only files this run was given: an incremental run reports nothing about files it did not audit.
-  const findings = (behaviour.findings ?? []).filter((f) => audited.has(f.file)).map((f) => complete(f));
-  const speculative = (behaviour.speculative ?? []).filter((f) => audited.has(f.file)).map((f) => complete(f, { confidence: 'low', verified: false }));
+  const findings = validating ? [] : (behaviour.findings ?? []).filter((f) => audited.has(f.file)).map((f) => complete(f));
+  const speculative = validating
+    ? []
+    : (behaviour.speculative ?? []).filter((f) => audited.has(f.file)).map((f) => complete(f, { confidence: 'low', verified: false }));
   const output = {
     findings,
     speculative,
-    discarded: [{ title: 'style nit', file: manifest.files[0]?.path, reason: 'style' }],
+    discarded: validating ? [] : [{ title: 'style nit', file: manifest.files[0]?.path, reason: 'style' }],
     known_findings_review: [],
     speculative_review: [],
+    ...(validating ? { validation_review: validationReview() } : {}),
     notes: 'written by the fake claude',
   };
   mkdirSync(dirname(manifest.output_path), { recursive: true });
@@ -211,7 +232,7 @@ switch (behaviour.behaviour) {
       result({ num_turns: 3, result: 'Waiting for the remaining specialists to report.' });
       break;
     }
-    subagent('verifier', []);
+    subagent('verifier', manifest.mode === 'validate' ? manifest.files.map((f) => f.path) : []);
     const output = writeOutput();
     result({ result: `Kept ${output.findings.length} findings, ${output.speculative.length} speculative, ${output.discarded.length} discarded.` });
   }

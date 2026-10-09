@@ -80,10 +80,23 @@ export const MODE_LABEL = {
   incremental: 'Incremental',
   full: 'Full',
   speculative: 'Speculative review',
+  validate: 'Validate',
 } as const;
 
 export const MODE_HELP = {
   incremental: 'Changes since the last audited commit.',
   full: 'The whole repository, capped per run; the least recently audited files go first.',
   speculative: 'Re-examines only the unconfirmed candidates, with the verifier.',
+  validate: 'Tries to reproduce open findings still at detected with a test; needs a usable test_command.',
+} as const;
+
+export const VALIDATION_OUTCOME_LABEL = {
+  reproduced: 'Reproduced',
+  not_reproduced: 'Not reproduced',
+  not_testable: 'Not testable',
+} as const;
+
+export const VERIFICATION_OFF = {
+  'no-test-command': 'no test_command',
+  'no-sandbox': 'no sandbox here',
 } as const;

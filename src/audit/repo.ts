@@ -10,8 +10,9 @@ import { FINGERPRINT_VERSION } from '../findings/fingerprint.js';
 import { migrateFingerprints } from '../findings/migrate.js';
 import { processFindings } from '../findings/process.js';
 import { speculativeVerdicts } from '../findings/speculative.js';
+import { applyValidation, type ValidationCandidate } from '../findings/validation.js';
 import { writeJson } from '../fs.js';
-import { authHeaderFor, gitEnv, prepareClone, writeDiff } from '../git/git.js';
+import { authHeaderFor, type Git, gitEnv, prepareClone, writeDiff } from '../git/git.js';
 import { writeReportSarif } from '../report/sarif-file.js';
 import { REPORT_SCHEMA, type ReadCoverage, type RepoReport } from '../report/types.js';
 import { readOptionalPat, readPat } from '../security/env.js';
@@ -106,8 +107,30 @@ export async function auditRepo({ repo, opts, ctx }: { repo: RepoConfig; opts: A
     }
   }
 
-  const planned = planAudit({ repo, opts, previous, git, head, cloneDir, log });
+  const validating = (opts.mode ?? repo.mode) === 'validate';
+  const planned = planAudit({
+    repo,
+    opts,
+    previous,
+    git,
+    head,
+    cloneDir,
+    log,
+    ...(validating
+      ? {
+          validation: {
+            stages: ctx.store.stagesFor(repo.name),
+            decisions: ctx.store.decisionsFor(repo.name),
+            suppressed: new Set(suppressionsOf(repo).keys()),
+            attempts: ctx.store.attemptsFor(repo.name),
+          },
+        }
+      : {}),
+  });
   if ('skip' in planned) return { status: 'skipped', reason: planned.skip };
+  if (planned.plan.mode === 'validate') {
+    return validateRepo({ repo, opts, ctx, previous, git, head, cloneDir, workDir, candidates: planned.plan.validationCandidates, runAt, written });
+  }
   const { mode, analyzers, lastByAnalyzer, base, fromBases, candidates, deleted, speculativeCandidates } = planned.plan;
   const speculativeMode = mode === 'speculative';
   const audits = auditsByAnalyzer(previous);
@@ -422,4 +445,159 @@ export async function auditRepo({ repo, opts, ctx }: { repo: RepoConfig; opts: A
     pending: omitted.length,
     rate_limit: run.rateLimit ?? null,
   };
+}
+
+// A validation pass: the verifier tries to reproduce each candidate with a test, and only its reproductions and the
+// attempts are written. It goes around classify, so nothing is resolved, missed or seen again, and it leaves the
+// audited commits and file coverage as they were.
+async function validateRepo({
+  repo,
+  opts,
+  ctx,
+  previous,
+  git,
+  head,
+  cloneDir,
+  workDir,
+  candidates,
+  runAt,
+  written,
+}: {
+  repo: RepoConfig;
+  opts: AuditOptions;
+  ctx: RunContext;
+  previous: RepoState | null;
+  git: Git;
+  head: string;
+  cloneDir: string;
+  workDir: string;
+  candidates: ValidationCandidate[];
+  runAt: string;
+  written: { runId: string; at: string };
+}): Promise<RepoOutcome> {
+  const { layout, log, events, runId } = ctx;
+  const files = [...new Set(candidates.map((c) => c.file))];
+  log.info('findings selected for validation', { repo: repo.name, findings: candidates.length, files: files.length });
+  events.emit('files_selected', {
+    repo: repo.name,
+    mode: 'validate',
+    analyzers: [],
+    base: null,
+    head,
+    selected: candidates.length,
+    omitted: 0,
+    skipped: 0,
+    deleted: 0,
+    files: files.slice(0, 200),
+  });
+  if (!previous || candidates.length === 0) {
+    log.info('no open findings at the detected stage to validate; skipping', { repo: repo.name });
+    return { status: 'skipped', reason: 'no findings to validate' };
+  }
+
+  const verification = verificationFor(repo);
+  if (verification.warning) log.warn(verification.warning, { repo: repo.name });
+  const verifyDir = join(layout.workspaceDir, '.verify', repo.name);
+  const rawOutput = join(workDir, 'raw-findings.json');
+  const manifest = buildManifest({
+    repo,
+    cloneDir,
+    mode: 'validate',
+    base: null,
+    head,
+    analyzers: [],
+    diffPath: join(workDir, 'changes.diff'),
+    selected: files.map((path): Candidate => ({ path, status: 'validate' })),
+    deleted: [],
+    omitted: [],
+    known: [],
+    falsePositives: [],
+    speculative: null,
+    validation: candidates,
+    verifyDir,
+    outputPath: rawOutput,
+  });
+  const manifestPath = join(workDir, 'manifest.json');
+  writeJson(manifestPath, manifest);
+  log.info('manifest written', { repo: repo.name, manifest: manifestPath });
+  if (opts.prepareOnly) return { status: 'prepared', manifest: manifestPath };
+  if (opts.isCancelled()) throw new CancelledError('cancelled before the Claude validation started');
+
+  const { run, tracker, usage, raw, promptVersion } = await runAuditSession({
+    ctx,
+    repo,
+    opts,
+    git,
+    head,
+    cloneDir,
+    workDir,
+    manifestPath,
+    rawOutput,
+    verifyDir,
+    mode: 'validate',
+    range: head,
+    analyzers: [],
+    runAt,
+    fileCount: candidates.length,
+  });
+  if (raw.findings.length) log.warn('the verifier returned findings in a validation pass; they are ignored', { repo: repo.name, count: raw.findings.length });
+
+  const { nextState, attempts, block } = applyValidation({ previous: previous.findings ?? {}, candidates, review: raw.validation_review, runId, at: runAt });
+  if (block.unreviewed.length) {
+    log.warn('the verifier gave no verdict for some findings; they were not counted as attempts', { repo: repo.name, fingerprints: block.unreviewed });
+  }
+  const reads = readsByAnalyzer(tracker, cloneDir);
+  const unread = files.filter((f) => !reads.any.has(f));
+  const report = redactDeep<RepoReport>({
+    schema: REPORT_SCHEMA,
+    run_id: runId,
+    repo: repo.name,
+    organization: repo.organization,
+    project: repo.project,
+    branch: repo.branch,
+    commit: head,
+    previous_commit: previous.last_commit ?? null,
+    mode: 'validate',
+    analyzers: [],
+    generated_at: new Date().toISOString(),
+    audited_files: files,
+    omitted_files_count: 0,
+    findings: [],
+    resolved: [],
+    open_total: Object.values(nextState).filter((e) => e.status === 'open').length,
+    carried_open: 0,
+    confirmed_known: 0,
+    speculative_new: [],
+    speculative_total: Object.values(nextState).filter((e) => e.status === 'speculative').length,
+    refuted: [],
+    suppressed_count: 0,
+    read_coverage: { selected: files.length, read: files.length - unread.length, unread },
+    discarded_count: 0,
+    discarded: [],
+    rejected: [],
+    notes: typeof raw.notes === 'string' ? raw.notes : '',
+    usage,
+    prompt_version: promptVersion,
+    specialist_model: repo.claude.models.specialists,
+    verification: { enabled: true, reason: null },
+    validation: block,
+  });
+  ctx.store.transaction(() => {
+    ctx.store.saveReport(report, ctx.date);
+    ctx.store.writeRepoState(repo.name, { ...previous, fingerprint_version: FINGERPRINT_VERSION, findings: nextState }, written);
+    ctx.store.recordAttempts(repo.name, attempts);
+  });
+  writeJson(join(ctx.dateDir, `${repo.name}.json`), report);
+  writeJson(join(ctx.dateDir, 'runs', runId, `${repo.name}.json`), report);
+  writeReportSarif(join(ctx.dateDir, 'runs', runId, `${repo.name}.sarif`), report, repo);
+
+  const outcome = {
+    tried: block.tried,
+    reproduced: block.reproduced.length,
+    not_reproduced: block.not_reproduced.length,
+    not_testable: block.not_testable.length,
+    unreviewed: block.unreviewed.length,
+  };
+  log.info('validation done', { repo: repo.name, ...outcome });
+  return { status: 'ok', new: 0, resolved: 0, speculative: 0, ...outcome, rate_limit: run.rateLimit ?? null };
 }

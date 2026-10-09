@@ -28,5 +28,6 @@ export type {
   StageSource,
   StartRunBody,
   UsageRow,
+  ValidationAttempt,
   YieldRow,
 } from '../../../src/dashboard/api';

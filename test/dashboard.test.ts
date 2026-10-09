@@ -414,6 +414,14 @@ describe('dashboard server', () => {
     assert.deepEqual(JSON.parse(res.body), []);
   });
 
+  it('serves a finding validation attempts, and counts the open findings a validation pass would try', async () => {
+    const res = await get(port, `/api/findings/demo/${'e'.repeat(32)}/validations`);
+    assert.equal(res.status, 200);
+    assert.deepEqual(JSON.parse(res.body), []);
+    const ov = JSON.parse((await get(port, '/api/overview')).body) as { repos: { name: string; counts: { to_validate: number } }[] };
+    assert.equal(ov.repos.find((r) => r.name === 'demo')?.counts.to_validate, 1);
+  });
+
   it('refuses a cross-site request for a stage history', async () => {
     const res = await get(port, `/api/findings/demo/${'e'.repeat(32)}/stages`, { headers: { 'sec-fetch-site': 'cross-site' } });
     assert.equal(res.status, 403);

@@ -31,8 +31,9 @@ export function git(dir: string, args: string[]): string {
 
 export interface Behaviour {
   behaviour?: 'findings' | 'no-output' | 'usage-limit' | 'hang' | 'slow' | 'fail';
-  findings?: { file: string; line: number; snippet: string; category: string; severity?: string; title?: string }[];
+  findings?: { file: string; line: number; snippet: string; category: string; severity?: string; title?: string; verified?: boolean }[];
   speculative?: { file: string; line: number; snippet: string; category: string; unconfirmed: string }[];
+  validation?: Record<string, 'reproduced' | 'not_reproduced' | 'not_testable'>;
   five_hour?: number;
   seven_day?: number;
   delay_ms?: number;

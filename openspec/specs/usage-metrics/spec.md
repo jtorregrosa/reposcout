@@ -73,10 +73,14 @@ Precision SHALL be given per analyzer, per specialists model and per prompt vers
 - **THEN** its model and prompt version show as not recorded
 
 ### Requirement: Yield per analyzer recorded per run
-For every audit outside a speculative review, RepoScout SHALL record each selected analyzer's yield in the database and the report: specialist instances, candidates proposed, kept, speculative and discarded counts, tokens, and cost; a speculative review records no yield.
+For every audit outside a speculative review or a validation pass, RepoScout SHALL record each selected analyzer's yield in the database and the report: specialist instances, candidates proposed, kept, speculative and discarded counts, tokens, and cost; a speculative review or a validation pass records no yield.
 
 #### Scenario: Speculative review
 - **WHEN** a run in speculative mode completes
+- **THEN** no yield is recorded for it
+
+#### Scenario: Validation pass
+- **WHEN** a run in validate mode completes
 - **THEN** no yield is recorded for it
 
 ### Requirement: Candidates read from specialist replies
@@ -115,7 +119,7 @@ Over the last 7 days, cost per new finding SHALL be the total `cost_usd_equivale
 - **THEN** the cost per confirmed finding is 1.00
 
 ### Requirement: Budget estimate for sweeps and backfills
-Before each sweep pass or backfill batch, RepoScout SHALL take the latest subscription reading whose window has not reset, add the measured cost of the previous pass, or 8% of the 5-hour window and 2% of the weekly one before any was measured, and refuse to start when the 5-hour sum exceeds the session limit (default 90%) or the weekly sum the weekly limit (default 95%).
+Before each sweep pass, backfill batch or validation session, RepoScout SHALL take the latest subscription reading whose window has not reset, add the measured cost of the previous pass, batch or session, or 8% of the 5-hour window and 2% of the weekly one before any was measured, and refuse to start when the 5-hour sum exceeds the session limit (default 90%) or the weekly sum the weekly limit (default 95%).
 
 #### Scenario: First pass without a reading
 - **WHEN** no current subscription reading exists
@@ -128,4 +132,15 @@ Before each sweep pass or backfill batch, RepoScout SHALL take the latest subscr
 #### Scenario: Status not allowed
 - **WHEN** the latest reading's status does not start with `allowed`
 - **THEN** the next pass is not started
+
+#### Scenario: Second validation session measured
+- **WHEN** the first validation session of a run moved the 5-hour window by 3% and it now reads 80%
+- **THEN** the next validation session starts, because 80% + 3% does not exceed 90%
+
+### Requirement: Usage of a validation session
+RepoScout SHALL record a validation session's usage row with the mode `validate`, empty analyzers and the number of findings it was given as its files; the row SHALL count in the 7-day totals and in cost per finding like any other run, and MUST NOT change precision.
+
+#### Scenario: Validation session on the Usage page
+- **WHEN** a validation session tried 8 findings
+- **THEN** the Usage page shows its row with the mode `validate`, 8 files and its cost
 

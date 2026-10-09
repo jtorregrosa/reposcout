@@ -9,6 +9,7 @@ import { parseConfig } from '../config/config.js';
 import { ActionError, errorMessage } from '../errors.js';
 import { parseKind } from '../findings/process.js';
 import { CLI_ENTRY, layout } from '../paths.js';
+import { verificationState } from '../security/sandbox.js';
 import { activeRun } from '../state/lock.js';
 import { DecisionError, openStore } from '../store/index.js';
 
@@ -283,10 +284,14 @@ export function startRun(
 ) {
   if (typeof untilCovered !== 'boolean') throw new ActionError(400, 'until_covered must be true or false');
   if (untilCovered && mode !== 'full') throw new ActionError(400, 'repeat until covered only applies to full mode');
-  if (sessionLimit != null && (!untilCovered || !Number.isInteger(sessionLimit) || (sessionLimit as number) < 10 || (sessionLimit as number) > 99)) {
-    throw new ActionError(400, 'session limit must be a whole percentage from 10 to 99, with repeat until covered');
+  if (
+    sessionLimit != null &&
+    ((!untilCovered && mode !== 'validate') || !Number.isInteger(sessionLimit) || (sessionLimit as number) < 10 || (sessionLimit as number) > 99)
+  ) {
+    throw new ActionError(400, 'session limit must be a whole percentage from 10 to 99, with repeat until covered or validate');
   }
-  if (!isMode(mode)) throw new ActionError(400, 'mode must be incremental, full or speculative');
+  if (!isMode(mode)) throw new ActionError(400, 'mode must be incremental, full, speculative or validate');
+  if (mode === 'validate' && Array.isArray(analyzers) && analyzers.length) throw new ActionError(400, 'a validation pass takes no analyzers');
   let chosen: Analyzer[] | null = null;
   if (analyzers != null && !(Array.isArray(analyzers) && analyzers.length === 0)) {
     try {
@@ -295,9 +300,13 @@ export function startRun(
       throw new ActionError(400, errorMessage(e));
     }
   }
-  const configured = parseConfig(readFileSync(configPath, 'utf8'), configPath).map((r) => r.name);
+  const config = parseConfig(readFileSync(configPath, 'utf8'), configPath);
+  const configured = config.map((r) => r.name);
   const selected = repos == null ? [] : repos;
   if (!Array.isArray(selected) || selected.some((r) => !configured.includes(r))) throw new ActionError(400, 'unknown repository in selection');
+  if (mode === 'validate' && !config.some((r) => (!selected.length || selected.includes(r.name)) && verificationState(r) === 'on')) {
+    throw new ActionError(400, 'no selected repository can run its tests: set test_command, and test_command_unsandboxed on a platform without a sandbox');
+  }
   if (maxFiles != null && !isValidMaxFiles(maxFiles)) throw new ActionError(400, `max files must be an integer from 1 to ${MAX_FILES_CEILING}`);
   const running = activeRun(layout(root).lockFile);
   if (running) throw new ActionError(409, `a run is already in progress (${running.run_id ?? running.pid})`);

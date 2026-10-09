@@ -18,6 +18,7 @@ import { CATEGORY_LABEL } from '@/lib/domain';
 import { formatDateTime, formatDuration, percent, shortSha } from '@/lib/format';
 import { CoverageBars } from './coverage-bars';
 import { CoverageSinceControl, useCoverageSince } from './coverage-since';
+import { ValidateButton } from './validate-button';
 
 export function RepositoryPage() {
   const { name = '' } = useParams();
@@ -67,12 +68,17 @@ export function RepositoryPage() {
         title={repo.name}
         description={`${repo.organization} / ${repo.project} · ${repo.branch} · last audited commit ${shortSha(repo.last_commit)}`}
         actions={
-          <Button asChild>
-            <Link to={findingsHref({ repo: repo.name })}>
-              Review findings
-              <ArrowRight />
-            </Link>
-          </Button>
+          <>
+            {repo.verification === 'on' && repo.counts.to_validate > 0 ? (
+              <ValidateButton repo={repo.name} toValidate={repo.counts.to_validate} disabled={!!ov.active} />
+            ) : null}
+            <Button asChild>
+              <Link to={findingsHref({ repo: repo.name })}>
+                Review findings
+                <ArrowRight />
+              </Link>
+            </Button>
+          </>
         }
       />
 

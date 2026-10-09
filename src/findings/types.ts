@@ -104,6 +104,8 @@ export interface RawFindings {
   discarded?: Discard[];
   known_findings_review?: KnownFindingReview[];
   speculative_review?: SpeculativeReview[];
+  // A validation pass's verdicts, checked when they are applied.
+  validation_review?: unknown;
   // The orchestrator's count of the candidates each specialist type returned, before verification.
   specialist_candidates?: unknown;
   notes?: string;

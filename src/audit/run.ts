@@ -8,12 +8,15 @@ import { localDate, readJsonOrNull } from '../fs.js';
 import { digestOf, notifyRun } from '../notify/webhooks.js';
 import type { Layout } from '../paths.js';
 import { writeSummary } from '../report/summary.js';
+import { verificationOffReason } from '../security/sandbox.js';
 import { redactDeep } from '../security/secrets.js';
 import { acquireLock, describeLock } from '../state/lock.js';
+import type { WindowCost } from '../state/types.js';
 import { openStore } from '../store/index.js';
 import { createEventSink } from '../telemetry/events.js';
 import { createLogger } from '../telemetry/logger.js';
-import type { AuditOptions, RepoOutcome, RunContext, SweepOptions } from './context.js';
+import { budgetDecision, latestRateLimit, passCost } from './budget.js';
+import type { AuditOptions, RepoOutcome, RunContext, SweepOptions, ValidationOptions } from './context.js';
 import { auditRepo } from './repo.js';
 import { sweepRepo } from './sweep.js';
 
@@ -22,11 +25,13 @@ export interface RunRequest {
   repos: RepoConfig[];
   opts: Omit<AuditOptions, 'isCancelled'>;
   sweep: SweepOptions | null;
+  // The budget limits of a validation pass; the defaults apply when a repository's configured mode is validate.
+  validation?: ValidationOptions | null;
   // Told once every repository is done; see src/notify/webhooks.ts.
   webhooks?: WebhookConfig[];
 }
 
-export async function runAudits({ layout, repos, opts, sweep, webhooks = [] }: RunRequest): Promise<ExitCode> {
+export async function runAudits({ layout, repos, opts, sweep, validation = null, webhooks = [] }: RunRequest): Promise<ExitCode> {
   const now = new Date();
   const date = localDate(now);
   const dateDir = join(layout.reportsDir, date);
@@ -48,6 +53,7 @@ export async function runAudits({ layout, repos, opts, sweep, webhooks = [] }: R
       repos,
       opts: { ...opts, isCancelled },
       sweep,
+      validation: validation ?? VALIDATION_DEFAULTS,
       webhooks,
       ctx: { layout, store: openStore(layout, log), date, dateDir, log, events, runId },
     });
@@ -57,16 +63,20 @@ export async function runAudits({ layout, repos, opts, sweep, webhooks = [] }: R
   }
 }
 
+const VALIDATION_DEFAULTS: ValidationOptions = { sessionLimit: 0.9, weeklyLimit: 0.95 };
+
 async function runLocked({
   repos,
   opts,
   sweep,
+  validation,
   webhooks,
   ctx,
 }: {
   repos: RepoConfig[];
   opts: AuditOptions;
   sweep: SweepOptions | null;
+  validation: ValidationOptions;
   webhooks: WebhookConfig[];
   ctx: RunContext;
 }): Promise<ExitCode> {
@@ -88,12 +98,37 @@ async function runLocked({
   let limitHit: string | null = null;
   let budgetHit: string | null = null;
   let cancelled = false;
+  let validationCost: WindowCost | null = null;
   for (const repo of repos) {
     if (!cancelled && opts.isCancelled()) cancelled = true;
     if (cancelled) {
       outcomes[repo.name] = { status: 'cancelled', reason: 'not attempted: run cancelled from the dashboard' };
       events.emit('repo_finished', { repo: repo.name, ...outcomes[repo.name] });
       continue;
+    }
+    const validating = (opts.mode ?? repo.mode) === 'validate';
+    const off = validating ? verificationOffReason(repo) : null;
+    if (off) {
+      log.info('validation pass skipped: verification is off for this repository', { repo: repo.name, reason: off });
+      outcomes[repo.name] = { status: 'skipped', reason: off };
+      delete failures[repo.name];
+      events.emit('repo_finished', { repo: repo.name, ...outcomes[repo.name] });
+      continue;
+    }
+    // A validation session is optional work, so like a sweep pass it starts only while the budget allows one more.
+    const before = validating && !limitHit && !budgetHit ? latestRateLimit(store.usage(50)) : null;
+    if (validating && !limitHit && !budgetHit) {
+      const decision = budgetDecision({ rateLimit: before, lastCost: validationCost, ...validation });
+      events.emit('validation_budget', { repo: repo.name, proceed: decision.proceed, reason: decision.reason });
+      if (!decision.proceed) {
+        budgetHit = decision.reason;
+        log.warn('validation pass stopped before this repository to stay within the session budget', { repo: repo.name, reason: decision.reason });
+        const error = `not attempted: ${decision.reason}`;
+        outcomes[repo.name] = { status: 'deferred', error };
+        failures[repo.name] = { error, deferred: true, at: new Date().toISOString() };
+        events.emit('repo_finished', { repo: repo.name, ...outcomes[repo.name] });
+        continue;
+      }
     }
     if (limitHit || budgetHit) {
       const why = limitHit ? 'subscription usage limit reached earlier in this run' : `session budget reached earlier in this run (${budgetHit})`;
@@ -109,6 +144,7 @@ async function runLocked({
     try {
       outcome = sweep ? await sweepRepo({ repo, opts, sweep, ctx }) : await auditRepo({ repo, opts, ctx });
       if (outcome.status === 'ok' && outcome.stopped === 'budget') budgetHit = outcome.reason ?? 'budget';
+      if (validating && outcome.status === 'ok') validationCost = passCost(before, outcome.rate_limit) ?? validationCost;
       delete failures[repo.name];
     } catch (e) {
       const message = errorMessage(e);

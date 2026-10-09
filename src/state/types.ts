@@ -86,6 +86,16 @@ export interface Decision {
   decided_on: DecidedOn;
 }
 
+export type ValidationOutcome = 'reproduced' | 'not_reproduced' | 'not_testable';
+
+// One try of a validation pass to reproduce an open finding with a test.
+export interface ValidationAttempt {
+  at: string;
+  run_id: string;
+  outcome: ValidationOutcome;
+  reason: string | null;
+}
+
 // What an auditor set by hand on a finding's labels. A field left null keeps what the audit said.
 export interface LabelOverride {
   kind: Kind | null;

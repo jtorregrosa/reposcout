@@ -4,7 +4,7 @@ import type { Analyzer } from '../config/analyzers.js';
 import type { Stage, StageEvent, StageSource } from '../findings/stage.js';
 import type { Discard, Finding, FindingStatus, Severity } from '../findings/types.js';
 import type { RunResult, YieldRow } from '../report/types.js';
-import type { Decision, FindingEvent, LabelOverride, LockInfo, RateLimit, UsageRow } from '../state/types.js';
+import type { Decision, FindingEvent, LabelOverride, LockInfo, RateLimit, UsageRow, ValidationAttempt } from '../state/types.js';
 
 export type { Category, Confidence, Kind, Repro } from '../findings/types.js';
 export type {
@@ -20,6 +20,7 @@ export type {
   StageEvent,
   StageSource,
   UsageRow,
+  ValidationAttempt,
   YieldRow,
 };
 
@@ -75,7 +76,8 @@ export interface RepoCoverage {
   oldest_times: (string | undefined)[];
 }
 
-export type FindingCounts = Record<FindingStatus | 'new_last_run', number> & { by_severity: Record<Severity, number> };
+// to_validate: the open findings a validation pass would pick, before its cap.
+export type FindingCounts = Record<FindingStatus | 'new_last_run' | 'to_validate', number> & { by_severity: Record<Severity, number> };
 
 export interface RepoView {
   name: string;
@@ -130,7 +132,7 @@ export interface Overview {
 
 export interface StartRunBody {
   repos: string[];
-  mode: 'incremental' | 'full' | 'speculative';
+  mode: 'incremental' | 'full' | 'speculative' | 'validate';
   max_files: number | null;
   analyzers: Analyzer[];
   until_covered: boolean;

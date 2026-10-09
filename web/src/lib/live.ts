@@ -20,6 +20,10 @@ export interface RepoOutcome {
   resolved?: number;
   speculative?: number;
   refuted?: number;
+  tried?: number;
+  reproduced?: number;
+  not_reproduced?: number;
+  not_testable?: number;
   files_read?: number;
   files_selected?: number;
   sweep?: boolean;
@@ -287,13 +291,21 @@ function apply(s: LiveState, ev: RunEvent): void {
         ev.is_error || ev.timed_out ? 'danger' : 'ok',
       );
       return;
+    case 'validation_budget':
+      if (ev.proceed === false) say(`${name}: validation stopped before this repository: ${str(ev.reason) ?? 'budget'}`, 'warn');
+      return;
     case 'repo_finished': {
       if (!repo) return;
       const outcome = ev as unknown as RepoOutcome;
       repo.stage = 'done';
       repo.outcome = outcome;
       repo.seconds = num(ev.seconds);
-      const detail = outcome.status === 'ok' ? `, ${outcome.new ?? 0} new, ${outcome.resolved ?? 0} resolved` : '';
+      const detail =
+        outcome.status !== 'ok'
+          ? ''
+          : outcome.tried != null
+            ? `, ${outcome.reproduced ?? 0} of ${outcome.tried} reproduced`
+            : `, ${outcome.new ?? 0} new, ${outcome.resolved ?? 0} resolved`;
       say(
         `${name}: ${outcome.status}${detail}${outcome.reason ? ` (${outcome.reason})` : ''}${outcome.error ? `: ${outcome.error}` : ''}`,
         outcome.status === 'failed' ? 'danger' : outcome.status === 'deferred' ? 'warn' : 'ok',

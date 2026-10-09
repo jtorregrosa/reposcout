@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { OVERVIEW_KEY } from './use-overview';
 
-type Action = Exclude<keyof typeof api, 'overview' | 'runEvents' | 'findingHistory' | 'stageHistory'>;
+type Action = Exclude<keyof typeof api, 'overview' | 'runEvents' | 'findingHistory' | 'stageHistory' | 'validationAttempts'>;
 type Input<A extends Action> = Parameters<(typeof api)[A]>[0];
 type Output<A extends Action> = Awaited<ReturnType<(typeof api)[A]>>;
 
