@@ -1,11 +1,15 @@
 // The dashboard's HTTP contract. The web app imports these types, so a change here fails its typecheck instead
 // of breaking a screen at runtime. Type-only: nothing in this module may have a runtime value.
+import type { Check } from '../commands/doctor.js';
 import type { Analyzer } from '../config/analyzers.js';
 import type { Stage, StageEvent, StageSource } from '../findings/stage.js';
 import type { Discard, Finding, FindingStatus, Severity } from '../findings/types.js';
 import type { RunResult, YieldRow } from '../report/types.js';
 import type { Decision, FindingEvent, IssueLink, LabelOverride, LockInfo, RateLimit, UsageRow, ValidationAttempt } from '../state/types.js';
+import type { TestOutcome } from './config-actions.js';
 
+export type { Check } from '../commands/doctor.js';
+export type { ConfigView, FieldKind as ConfigFieldKind, FieldView, KeySpec, Origin, RepoConfigView, Scope, WebhookView } from '../config/editable.js';
 export type { Category, Confidence, Kind, Repro } from '../findings/types.js';
 export type {
   FieldKind,
@@ -20,6 +24,7 @@ export type {
   SprintRef,
   UserRef,
 } from '../jira/types.js';
+export type { TestOutcome } from './config-actions.js';
 export type {
   Analyzer,
   Decision,
@@ -148,6 +153,27 @@ export interface Overview {
   run_results: RunResult[];
   // The Jira site findings are reported to, and whether its credential variables are set. Never the credential.
   jira: { site: string; ready: boolean } | null;
+}
+
+// GET /api/checks: what doctor reports, against the environment the dashboard loaded when it started.
+export interface ChecksView {
+  env_loaded_at: string;
+  checks: Check[];
+}
+
+// The repository fields Add repository and Test connection accept; everything else is inherited from defaults.
+export interface NewRepoBody {
+  provider: 'azure-devops' | 'github';
+  name?: string;
+  organization: string;
+  project?: string;
+  repo: string;
+  branch?: string;
+}
+
+export interface TestResult {
+  result: TestOutcome;
+  detail: string;
 }
 
 export interface StartRunBody {

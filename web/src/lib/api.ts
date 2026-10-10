@@ -1,15 +1,20 @@
 import type {
+  ChecksView,
+  ConfigView,
   FindingEvent,
   Kind,
+  NewRepoBody,
   Overview,
   ParentRef,
   ReportBody,
   ReportForm,
   ReportOutcome,
   RunEvent,
+  Scope,
   SprintRef,
   StageEvent,
   StartRunBody,
+  TestResult,
   UserRef,
   ValidationAttempt,
 } from './types';
@@ -100,6 +105,23 @@ export const api = {
   openInEditor: (target: { repo: string; file: string; line: number }) => post<{ opened: string }>('open', target),
   report: (body: ReportBody) => post<ReportOutcome[]>('report', body),
   unlink: (ref: FindingRef) => post<{ unlinked: string }>('unlink', ref),
+  configSet: (edit: ConfigEdit & { value: unknown }) => post<ConfigEdit & { value: unknown }>('config-set', edit),
+  configUnset: (edit: ConfigEdit) => post<ConfigEdit>('config-unset', edit),
+  repoAdd: (entry: NewRepoBody) => post<{ added: string }>('repo-add', { entry }),
+  repoRemove: (ref: { repo: string }) => post<{ removed: string }>('repo-remove', ref),
+  repoTest: (entry: NewRepoBody) => post<TestResult>('repo-test', { entry }),
+};
+
+export interface ConfigEdit {
+  scope: Scope;
+  // The repository or webhook; absent for defaults.
+  name?: string;
+  key: string;
+}
+
+export const settings = {
+  config: () => getJson<ConfigView>('/api/config'),
+  checks: () => getAuthed<ChecksView>('/api/checks', {}),
 };
 
 export const jira = {

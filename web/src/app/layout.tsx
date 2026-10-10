@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Activity, ChartColumn, FolderGit2, LayoutDashboard, ListChecks, Search } from 'lucide-react';
+import { Activity, ChartColumn, FolderGit2, LayoutDashboard, ListChecks, Search, Settings } from 'lucide-react';
 import { Suspense, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { Logo } from '@/components/logo';
@@ -98,6 +98,22 @@ function ConnectionStatus() {
   );
 }
 
+function SettingsLink() {
+  const { pathname } = useLocation();
+  return (
+    <SidebarMenu>
+      <SidebarMenuItem>
+        <SidebarMenuButton asChild isActive={pathname.startsWith('/settings')} tooltip="Settings">
+          <NavLink to="/settings">
+            <Settings />
+            <span>Settings</span>
+          </NavLink>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    </SidebarMenu>
+  );
+}
+
 // The sidebar never waits for the overview: its badges appear once it has loaded.
 function AppSidebar() {
   const { data: triage } = useQuery({ ...overviewQuery, select: triageCount });
@@ -128,6 +144,7 @@ function AppSidebar() {
         />
       </SidebarContent>
       <SidebarFooter>
+        <SettingsLink />
         <ConnectionStatus />
       </SidebarFooter>
       <SidebarRail />

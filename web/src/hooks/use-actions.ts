@@ -19,6 +19,11 @@ const SUCCESS: Record<Action, string> = {
   label: 'Labels saved. They hold across runs.',
   report: 'Reported to Jira.',
   unlink: 'Issue unlinked. It is unchanged in Jira.',
+  configSet: 'Saved to repos.yaml. The next run uses it.',
+  configUnset: 'Reset in repos.yaml. The inherited value applies from the next run.',
+  repoAdd: 'Added to repos.yaml. Audit it to see its first findings.',
+  repoRemove: 'Removed from repos.yaml. Its history is kept.',
+  repoTest: 'Connection tested.',
 };
 
 export function useInvalidateAfterAction() {
@@ -26,6 +31,7 @@ export function useInvalidateAfterAction() {
   return () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
     void queryClient.invalidateQueries({ queryKey: queryKeys.finding.all });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.config });
   };
 }
 

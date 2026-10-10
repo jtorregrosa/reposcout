@@ -24,6 +24,7 @@ import { plural, ratio } from '@/lib/format';
 import { queueOf } from '@/lib/queues';
 import { countBy, validationScope } from '@/lib/selectors';
 import type { FailureView, FindingView, RepoView } from '@/lib/types';
+import { AddRepository } from './add-repository';
 
 function Health({ failure }: { failure: FailureView | undefined }) {
   if (!failure)
@@ -160,6 +161,7 @@ export function RepositoriesPage() {
         actions={
           <>
             <CoverageSinceControl since={since} onChange={setSince} />
+            <AddRepository />
             <NewAuditButton />
           </>
         }

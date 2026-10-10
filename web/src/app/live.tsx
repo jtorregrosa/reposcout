@@ -50,6 +50,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     es.addEventListener('overview_changed', () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.overview });
       void queryClient.invalidateQueries({ queryKey: queryKeys.finding.all });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.config });
     });
     return () => {
       es.close();

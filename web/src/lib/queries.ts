@@ -1,8 +1,10 @@
 import { queryOptions } from '@tanstack/react-query';
-import { api, type FindingRef, jira } from './api';
+import { api, type FindingRef, jira, settings } from './api';
 
 export const queryKeys = {
   overview: ['overview'] as const,
+  config: ['config'] as const,
+  checks: ['checks'] as const,
   finding: {
     all: ['finding'] as const,
     history: (ref: FindingRef) => ['finding', 'history', ref.repo, ref.fingerprint] as const,
@@ -30,6 +32,12 @@ export const stageHistoryQuery = (ref: FindingRef) =>
 
 export const validationsQuery = (ref: FindingRef) =>
   queryOptions({ queryKey: queryKeys.finding.validations(ref), queryFn: () => api.validationAttempts(ref.repo, ref.fingerprint) });
+
+// Refreshed with the overview, since both follow repos.yaml.
+export const configQuery = queryOptions({ queryKey: queryKeys.config, queryFn: settings.config, staleTime: Number.POSITIVE_INFINITY });
+
+// The checks call Jira, so they run when the section opens or on request, never in the background.
+export const checksQuery = queryOptions({ queryKey: queryKeys.checks, queryFn: settings.checks, staleTime: Number.POSITIVE_INFINITY, retry: false });
 
 // A finished run's event log never changes.
 export const runEventsQuery = (runId: string) =>
