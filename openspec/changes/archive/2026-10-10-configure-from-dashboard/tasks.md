@@ -41,5 +41,5 @@
 ## 5. Docs and verification
 
 - [x] 5.1 Update README.md: the dashboard section (Settings, editing a repository, adding and removing one), the configuration section noting that repos.yaml stays editable by hand and which keys only change there, and the security model's dashboard limits and Test connection
-- [ ] 5.2 At archive, update the Purpose of `openspec/specs/dashboard/spec.md` so its list of writes includes configuration edits and repository entries
+- [x] 5.2 At archive, update the Purpose of `openspec/specs/dashboard/spec.md` so its list of writes includes configuration edits and repository entries
 - [x] 5.3 Run `pnpm verify`
