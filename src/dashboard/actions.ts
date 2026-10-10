@@ -5,7 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { type Document, isMap, isSeq, parseDocument, YAMLMap, YAMLSeq } from 'yaml';
 import { killTree } from '../claude/session.js';
 import { type Analyzer, isMode, isValidMaxFiles, MAX_FILES_CEILING, type Mode, parseAnalyzers } from '../config/analyzers.js';
-import { parseConfig } from '../config/config.js';
+import { parseConfig, parseJiraSite, parseNotifications } from '../config/config.js';
 import { ActionError, errorMessage } from '../errors.js';
 import { parseKind } from '../findings/process.js';
 import { CLI_ENTRY, layout } from '../paths.js';
@@ -48,7 +48,7 @@ function cleanReason(reason: unknown): string {
   return r;
 }
 
-function repoNode(doc: Document, name: string): YAMLMap {
+export function repoNode(doc: Document, name: string): YAMLMap {
   const repos = doc.get('repos', true);
   if (!isSeq(repos)) throw new ActionError(500, 'repos.yaml has no "repos" list');
   const node = repos.items.find((item): item is YAMLMap => isMap(item) && (item.get('name') ?? item.get('repo')) === name);
@@ -57,17 +57,21 @@ function repoNode(doc: Document, name: string): YAMLMap {
 }
 
 // Edits through the yaml Document API so the file keeps its comments and layout, validates the result with the
-// same parser the audit uses, and only then replaces the file atomically.
-function editConfig<T>(configPath: string, mutate: (doc: Document) => T): T {
+// same parsers a run uses, and only then replaces the file atomically. An edit the auditor typed is refused with 400;
+// one the dashboard composed itself, such as a suppression, with 500.
+export function editConfig<T>(configPath: string, mutate: (doc: Document) => T, { invalidStatus = 500 } = {}): T {
   const text = readFileSync(configPath, 'utf8');
   const doc = parseDocument(text);
   if (doc.errors.length) throw new ActionError(500, `repos.yaml does not parse: ${doc.errors[0]?.message}`);
   const outcome = mutate(doc);
-  const next = doc.toString();
+  // The yaml defaults fold long lines at 80 columns and pad flow lists, which would rewrite lines nobody edited.
+  const next = doc.toString({ lineWidth: 0, flowCollectionPadding: false });
   try {
     parseConfig(next, configPath);
+    parseNotifications(next, configPath);
+    parseJiraSite(next, configPath);
   } catch (e) {
-    throw new ActionError(500, `edit rejected, repos.yaml would be invalid: ${errorMessage(e)}`);
+    throw new ActionError(invalidStatus, `edit rejected, repos.yaml would be invalid: ${errorMessage(e)}`);
   }
   const tmp = `${configPath}.reposcout-tmp`;
   writeFileSync(tmp, next);

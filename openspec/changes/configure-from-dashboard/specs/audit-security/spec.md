@@ -15,6 +15,13 @@ The dashboard MUST NOT write `test_command`, `test_command_unsandboxed`, `path`,
 - **WHEN** an edit asks to change the `organization` of a configured repository
 - **THEN** it is refused with status 400 and repos.yaml is unchanged
 
+### Requirement: New entries never inherit the other provider's token
+When `defaults` sets `pat_env` and a new entry's provider differs from the defaults' provider, the dashboard MUST write that entry's own provider's fixed default `pat_env` (`REPOSCOUT_GITHUB_TOKEN` or `REPOSCOUT_ADO_PAT`), and Test connection MUST resolve the entry the same way. It is the only `*_env` value the dashboard writes.
+
+#### Scenario: Token of the other provider in defaults
+- **WHEN** `defaults` sets `pat_env: REPOSCOUT_ADO_PAT` with the Azure DevOps provider and a GitHub repository is added
+- **THEN** the new entry gets `pat_env: REPOSCOUT_GITHUB_TOKEN`, so the Azure DevOps PAT is never sent to github.com
+
 ### Requirement: Test connection credentials
 Test connection MUST send the repository token only to the provider's fixed host (`dev.azure.com` or `github.com`), only as an `Authorization` header through `GIT_CONFIG_*` environment variables as a clone does, never on argv or in a URL, and MUST redact the token from any error it returns. It MUST only list remote refs and write nothing to disk.
 

@@ -37,7 +37,7 @@ const suppressionsOf = (repo: RepoConfig) => new Map(repo.suppressed.map((s) => 
 const refutedByAuditorIn = (store: Store, repo: string) =>
   new Set([...store.decisionsFor(repo)].filter(([, d]) => d.decided_on === 'open' && d.verdict === 'refuted').map(([fp]) => fp));
 
-function scmAuthHeader(repo: RepoConfig): string | null {
+export function scmAuthHeader(repo: RepoConfig): string | null {
   if (repo.provider === 'local') return null;
   if (repo.provider === 'github') {
     const pat = readOptionalPat(repo.pat_env);

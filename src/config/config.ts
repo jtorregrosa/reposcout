@@ -6,15 +6,16 @@ import { z } from 'zod';
 import { SEVERITIES } from '../findings/types.js';
 import { ANALYZERS, AUTH_MODES, isValidMaxFiles, MODES, maxFilesMessage, parseAnalyzers } from './analyzers.js';
 
-const MODEL_ALIASES = ['haiku', 'sonnet', 'opus', 'fable'];
+export const MODEL_ALIASES = ['haiku', 'sonnet', 'opus', 'fable'];
 const NAME = /^[A-Za-z0-9._-]+$/;
+export const BRANCH = /^[A-Za-z0-9._/-]+$/;
 const SHELL_OPERATORS = /[;&|><`$\r\n]/;
 const SUPPRESSION_ERROR = 'has a suppressed entry without a 32-hex fingerprint and a reason.';
 
-const identifier = (key: string) =>
+export const identifier = (key: string) =>
   z.string({ error: `has an invalid or missing "${key}".` }).refine((v) => NAME.test(v.replace(/ /g, '')), `has an invalid or missing "${key}".`);
 
-const model = z
+export const model = z
   .string()
   .refine((m) => MODEL_ALIASES.includes(m) || /^claude-[a-z0-9-]+$/.test(m), { error: (iss) => `uses unknown model "${String(iss.input)}".` });
 
@@ -67,10 +68,7 @@ const repoSchema = z.looseObject({
   project: identifier('project'),
   repo: identifier('repo'),
   name: identifier('name'),
-  branch: z
-    .string()
-    .regex(/^[A-Za-z0-9._/-]+$/, 'has an invalid branch.')
-    .default('main'),
+  branch: z.string().regex(BRANCH, 'has an invalid branch.').default('main'),
   pat_env: z.string().min(1),
   mode: z.enum(MODES).optional(),
   analyzers: z.unknown().transform((value, ctx) => {

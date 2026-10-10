@@ -41,6 +41,10 @@ The new actions are:
 
 *Alternative:* `PUT` a whole entry. This was rejected because it would rewrite keys the auditor never touched, including the read-only ones, and would make it impossible to tell an override from an inherited value.
 
+### Serialization keeps unedited lines
+
+`editConfig` serializes with `lineWidth: 0` and `flowCollectionPadding: false`. The `yaml` defaults fold long lines at 80 columns and write `[ a, b ]`, which rewrote lines nobody edited, suppressions included, as soon as a real repos.yaml was edited.
+
 ### Edits apply to the file as it is now
 
 `editConfig` reads the file on every call, so an operation on one key applies on top of any hand edit made since the page loaded. Because operations are per key, the only lost update is two editors changing the same key, where the later one wins, which is what editing a file by hand already does. The page refreshes from the file-change push after every write.
@@ -50,6 +54,12 @@ The new actions are:
 ### Read-only keys are a list on the server
 
 The editable-key list lives next to the schema in `src/config/`. Every other key the resolver returns carries `editable: false` and the reason shown in the UI ("decides what runs on this machine", "names where a credential is read from", "identifies the repository's history"). The UI never decides editability. In `repo-add`, the entry must not carry any of `test_command`, `test_command_unsandboxed`, `path`, `claude.auth`, `pat_env` or `jira`, and `provider` must be `azure-devops` or `github`. So a new repository always gets the derived `pat_env` and inherits the rest from `defaults`.
+
+### A new entry never inherits the other provider's token
+
+A `pat_env` in `defaults` names the token of the defaults' provider. A repository of the other provider that inherited it would send, say, the Azure DevOps PAT to github.com. Running the change against a real repos.yaml showed exactly that. So when `defaults` sets `pat_env` and the new entry's provider differs from the defaults' provider, `repo-add` writes that provider's fixed default (`REPOSCOUT_GITHUB_TOKEN` or `REPOSCOUT_ADO_PAT`), and Test connection resolves the entry the same way. That is the only `*_env` value the dashboard writes, and the page never chooses it.
+
+*Alternatives:* refusing the entry and leaving it to a hand edit, or only warning. Both were declined, because a GitHub repository is the common case and a warning still sends the token.
 
 ### Test connection runs git, not doctor
 

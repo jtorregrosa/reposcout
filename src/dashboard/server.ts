@@ -4,6 +4,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AddressInfo } from 'node:net';
 import { dirname, join } from 'node:path';
 import { z } from 'zod';
+import { collectChecks } from '../commands/doctor.js';
 import { ActionError, errorMessage } from '../errors.js';
 import { localDate, parseJsonLines } from '../fs.js';
 import { JiraError } from '../jira/client.js';
@@ -23,6 +24,8 @@ import {
   undoDecision,
   unsuppressFinding,
 } from './actions.js';
+import type { ChecksView } from './api.js';
+import { addRepository, type ConfigDeps, readConfigView, removeRepository, setConfigValue, testRepository, unsetConfigValue } from './config-actions.js';
 import { type JiraDeps, jiraLookup, jiraStatus, type LookupKind, reportAction, unlinkAction } from './jira-actions.js';
 import { listRuns, overviewSignature, readOverview, runEventsFile } from './overview.js';
 import { resolveAsset } from './static.js';
@@ -190,6 +193,11 @@ const BODIES = {
     summaries: z.record(z.string(), z.string().max(255)).default({}),
   }),
   unlink: z.strictObject({ repo: z.string(), fingerprint: z.string() }),
+  'config-set': z.strictObject({ scope: z.unknown(), name: z.unknown().optional(), key: z.unknown(), value: z.unknown() }),
+  'config-unset': z.strictObject({ scope: z.unknown(), name: z.unknown().optional(), key: z.unknown() }),
+  'repo-add': z.strictObject({ entry: z.unknown() }),
+  'repo-remove': z.strictObject({ repo: z.string() }),
+  'repo-test': z.strictObject({ entry: z.unknown() }),
 };
 
 type ActionName = keyof typeof BODIES;
@@ -202,7 +210,7 @@ export interface ServerOptions {
   port: number;
   host?: string;
   pollMs?: number;
-  deps?: ActionDeps & JiraDeps;
+  deps?: ActionDeps & JiraDeps & ConfigDeps;
 }
 
 function parseBody(name: ActionName, text: string): unknown {
@@ -224,6 +232,8 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
   // Proves a request comes from the page this server served: other origins can send a POST to localhost,
   // but cannot read /api/session to learn the token, and a custom header forces a CORS preflight we never grant.
   const token = randomBytes(32).toString('hex');
+  // The process environment, .env included, as the checks see it: loaded once when ui started.
+  const envLoadedAt = new Date().toISOString();
   const store = openStore(layout(root));
   let reporting: Promise<unknown> = Promise.resolve();
   const actions: { [K in ActionName]: (b: Body<K>) => unknown } = {
@@ -256,6 +266,11 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
       return next;
     },
     unlink: (b) => unlinkAction({ root, repo: b.repo, fingerprint: b.fingerprint }),
+    'config-set': (b) => setConfigValue({ configPath, scope: b.scope, name: b.name, key: b.key, value: b.value }),
+    'config-unset': (b) => unsetConfigValue({ configPath, scope: b.scope, name: b.name, key: b.key }),
+    'repo-add': (b) => addRepository({ configPath, entry: b.entry }),
+    'repo-remove': (b) => removeRepository({ configPath, repo: b.repo }),
+    'repo-test': (b) => testRepository({ root, configPath, entry: b.entry }, deps),
   };
   const isAction = (name: string): name is ActionName => Object.hasOwn(actions, name);
 
@@ -301,6 +316,17 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
     }
     if (req.method !== 'GET') return reply(405, { error: 'method not allowed' });
 
+    // The checks call Jira with its credential, so they need the session token like actions do.
+    if (url.pathname === '/api/checks') {
+      if (!sameToken(req.headers['x-reposcout-token'], token)) return reply(403, { error: 'missing or invalid session token' });
+      try {
+        const body: ChecksView = { env_loaded_at: envLoadedAt, checks: await collectChecks(configPath, deps.jiraFetch ? { jiraFetch: deps.jiraFetch } : {}) };
+        return reply(200, body);
+      } catch (e) {
+        return replyError(e);
+      }
+    }
+
     // Lookups spend the Jira credential, so they need the session token like actions do.
     const lookup = /^\/api\/jira\/(meta|parents|users|sprints)$/.exec(url.pathname);
     if (lookup) {
@@ -315,6 +341,7 @@ export function startServer({ root, uiDir, configPath, port, host = '127.0.0.1',
     try {
       if (url.pathname === '/api/session') return reply(200, { token });
       if (url.pathname === '/api/overview') return reply(200, readOverview(root, configPath, store));
+      if (url.pathname === '/api/config') return reply(200, readConfigView(configPath));
       if (url.pathname === '/api/live') return liveStream({ root, configPath, store, req, res, pollMs });
       const history = /^\/api\/findings\/([^/]+)\/([0-9a-f]{32})\/history$/.exec(url.pathname);
       if (history) return reply(200, store.findingHistory(decodeURIComponent(history[1] as string), history[2] as string));

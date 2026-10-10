@@ -49,7 +49,7 @@ The dashboard SHALL ask for confirmation, saying why, before removing an analyze
 - **THEN** a confirmation explains that open performance findings stay open until a run includes `performance` again, and nothing is written until it is confirmed
 
 ### Requirement: Add a repository
-The Repositories page SHALL offer Add repository, a form for an `azure-devops` or `github` repository with `name`, `organization`, `project` (Azure DevOps only), `repo` and `branch`, and SHALL append the entry to repos.yaml with no other keys, so it inherits `defaults`. A name already in repos.yaml SHALL be refused with status 409.
+The Repositories page SHALL offer Add repository, a form for an `azure-devops` or `github` repository with `name`, `organization`, `project` (Azure DevOps only), `repo` and `branch`, and SHALL append the entry to repos.yaml with no other keys, so it inherits `defaults`, except its provider's default `pat_env` when `defaults` names a token for the other provider. A name already in repos.yaml SHALL be refused with status 409.
 
 #### Scenario: GitHub repository added
 - **WHEN** the auditor adds `lib` with provider `github`, organization `acme` and repo `lib`

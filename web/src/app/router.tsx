@@ -96,6 +96,7 @@ export const routes: RouteObject[] = [
           },
           { path: 'runs/:runId?', handle: crumb('Runs'), lazy: async () => ({ Component: (await import('@/features/runs/runs-page')).RunsPage }) },
           { path: 'insights', handle: crumb('Insights'), lazy: async () => ({ Component: (await import('@/features/insights/insights-page')).InsightsPage }) },
+          { path: 'settings', handle: crumb('Settings'), lazy: async () => ({ Component: (await import('@/features/settings/settings-page')).SettingsPage }) },
           { path: 'usage', loader: ({ request }) => redirect(`/insights${new URL(request.url).search}`) },
           { path: '*', Component: NotFound },
         ],

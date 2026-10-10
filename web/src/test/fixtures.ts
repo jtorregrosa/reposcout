@@ -1,4 +1,4 @@
-import type { FindingView, Overview, RepoView } from '@/lib/types';
+import type { ConfigView, FieldView, FindingView, Overview, RepoView } from '@/lib/types';
 
 let seq = 0;
 // Distinct from the first character, like real fingerprints, so a search by prefix can tell them apart.
@@ -119,4 +119,71 @@ export function triageFixture() {
     repo({ name: 'web', verification: 'no-test-command', test_command: false, counts: { ...repo().counts, open: 1, resolved: 1 } }),
   ];
   return overview({ findings, repos });
+}
+
+const field = (over: Partial<FieldView> & Pick<FieldView, 'key'>): FieldView => ({
+  value: undefined,
+  origin: 'built-in',
+  set_here: false,
+  editable: true,
+  ...over,
+});
+
+const READ_ONLY_REASON = 'Decides what runs on this machine; change it in repos.yaml.';
+
+export function configView(over: Partial<ConfigView> = {}): ConfigView {
+  return {
+    keys: [
+      { key: 'branch', label: 'Branch', kind: 'text' },
+      {
+        key: 'analyzers',
+        label: 'Analyzers',
+        kind: 'multi',
+        options: ['security', 'concurrency', 'error-handling', 'logic', 'performance'],
+        warn: 'analyzers',
+      },
+      { key: 'max_files_per_run', label: 'Files per run', kind: 'int' },
+      { key: 'excluded_paths', label: 'Excluded paths', kind: 'list', appends: true },
+      { key: 'claude.models.specialists', label: 'Specialists model', kind: 'model', options: ['haiku', 'sonnet', 'opus', 'fable'] },
+      { key: 'claude.models.verifier', label: 'Verifier model', kind: 'model', options: ['haiku', 'sonnet', 'opus', 'fable'] },
+      { key: 'claude.max_turns', label: 'Orchestrator turns', kind: 'int' },
+    ],
+    read_only: {
+      name: { label: 'Name', reason: 'Identifies the repository and its history; change it in repos.yaml.' },
+      test_command: { label: 'Test command', reason: READ_ONLY_REASON },
+    },
+    defaults: [
+      field({ key: 'max_files_per_run', value: 40, inherited_by: 2, overridden_by: 0 }),
+      field({ key: 'claude.models.verifier', value: 'opus', origin: 'defaults', set_here: true, inherited_by: 2, overridden_by: 0 }),
+      field({ key: 'claude.max_turns', value: 60, inherited_by: 1, overridden_by: 1 }),
+      field({ key: 'test_command', editable: false, reason: READ_ONLY_REASON, origin: 'unset', inherited_by: 2, overridden_by: 0 }),
+    ],
+    repos: [
+      {
+        name: 'api',
+        provider: 'azure-devops',
+        fields: [
+          field({
+            key: 'name',
+            value: 'api',
+            origin: 'repo',
+            set_here: true,
+            editable: false,
+            reason: 'Identifies the repository and its history; change it in repos.yaml.',
+          }),
+          field({ key: 'branch', value: 'main', origin: 'built-in' }),
+          field({ key: 'analyzers', value: ['security', 'concurrency', 'error-handling', 'logic', 'performance'] }),
+          field({ key: 'max_files_per_run', value: 40 }),
+          field({ key: 'excluded_paths', value: ['docs/**', 'scripts/**'], origin: 'repo', set_here: true, inherited: ['docs/**'], own: ['scripts/**'] }),
+          field({ key: 'claude.models.specialists', value: 'haiku', origin: 'repo', set_here: true }),
+          field({ key: 'claude.models.verifier', value: 'opus', origin: 'defaults' }),
+          field({ key: 'claude.max_turns', value: 80, origin: 'repo', set_here: true }),
+          field({ key: 'test_command', value: 'dotnet test', origin: 'repo', set_here: true, editable: false, reason: READ_ONLY_REASON }),
+        ],
+      },
+    ],
+    jira: null,
+    webhooks: [],
+    ...over,
+  };
 }

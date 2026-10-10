@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Activity, ChartColumn, FileSearch, FolderGit2, Keyboard, LayoutDashboard, ListChecks, Monitor, Moon, Play, Sun } from 'lucide-react';
+import { Activity, ChartColumn, FileSearch, FolderGit2, Keyboard, LayoutDashboard, ListChecks, Monitor, Moon, Play, Settings, Sun } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { SeverityDot } from '@/components/severity';
@@ -20,6 +20,7 @@ const PAGES = [
   { to: '/repositories', label: 'Repositories', icon: FolderGit2 },
   { to: '/runs', label: 'Runs', icon: Activity },
   { to: '/insights', label: 'Insights', icon: ChartColumn },
+  { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [

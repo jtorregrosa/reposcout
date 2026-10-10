@@ -12,7 +12,7 @@ import { openStore } from '../store/index.js';
 
 const MIN_NODE: [number, number] = [22, 12];
 
-interface Check {
+export interface Check {
   name: string;
   ok: boolean;
   // Worth reading, but not a reason to fail.
@@ -21,6 +21,13 @@ interface Check {
 }
 
 export async function doctorCommand({ config }: { config: string }, { jiraFetch }: { jiraFetch?: typeof fetch } = {}): Promise<ExitCode> {
+  const checks = await collectChecks(resolve(ROOT, config), { jiraFetch });
+  for (const c of checks) console.log(`${c.ok ? (c.warn ? 'WARN' : 'ok  ') : 'FAIL'} ${c.name}: ${c.detail}`);
+  return checks.every((c) => c.ok) ? ExitCode.Ok : ExitCode.Failed;
+}
+
+// What doctor prints, also served to the dashboard's Credentials section. No check returns a secret value.
+export async function collectChecks(configPath: string, { jiraFetch }: { jiraFetch?: typeof fetch } = {}): Promise<Check[]> {
   const checks: Check[] = [];
   const check = (name: string, fn: () => string) => {
     try {
@@ -47,7 +54,7 @@ export async function doctorCommand({ config }: { config: string }, { jiraFetch 
   });
   let repos: RepoConfig[] = [];
   check('repos.yaml', () => {
-    repos = loadConfig(resolve(ROOT, config));
+    repos = loadConfig(configPath);
     return `${repos.length} repositories`;
   });
   // GitHub tokens are optional (public repositories), so only Azure DevOps PATs are required here. A run prefers
@@ -76,7 +83,7 @@ export async function doctorCommand({ config }: { config: string }, { jiraFetch 
   // Whether each webhook's URL variable is set and looks like a URL; the value itself is never printed.
   let webhooks: WebhookConfig[] = [];
   check('notifications', () => {
-    webhooks = loadNotifications(resolve(ROOT, config));
+    webhooks = loadNotifications(configPath);
     return webhooks.length ? `${webhooks.length} webhooks` : 'none configured';
   });
   for (const w of webhooks) {
@@ -91,7 +98,7 @@ export async function doctorCommand({ config }: { config: string }, { jiraFetch 
   // Reporting to Jira: the site, the credential variables, and whether Jira accepts them. Only the display name is shown.
   let jira: JiraSite | null = null;
   check('jira', () => {
-    jira = loadJiraSite(resolve(ROOT, config));
+    jira = loadJiraSite(configPath);
     return jira ? jira.site : 'not configured; findings are not reported to Jira';
   });
   const site = jira as JiraSite | null;
@@ -109,6 +116,5 @@ export async function doctorCommand({ config }: { config: string }, { jiraFetch 
     return `${layout().dbFile} · schema ${store.schemaVersion} · ${store.repoNames().length} repositories`;
   });
   check('agents', () => Object.keys(buildAgents({ rootDir: PACKAGE_DIR, models: repos[0]?.claude.models ?? {} })).join(', '));
-  for (const c of checks) console.log(`${c.ok ? (c.warn ? 'WARN' : 'ok  ') : 'FAIL'} ${c.name}: ${c.detail}`);
-  return checks.every((c) => c.ok) ? ExitCode.Ok : ExitCode.Failed;
+  return checks;
 }
